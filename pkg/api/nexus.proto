@@ -2,7 +2,13 @@ syntax = "proto3";
 package nexus.api;
 option go_package = "api";
 
-message InsertKVRequest {
+message StatusResponse {
+  int32 code = 1;
+  string message = 2;
+  map<string, bytes> meta = 3;
+}
+
+message SaveKVRequest {
   bytes key = 1;
   bytes value = 2;
   map<string, bytes> options = 3;
@@ -11,27 +17,6 @@ message InsertKVRequest {
 message DeleteKVRequest {
   bytes key = 1;
   bytes value = 2;
-  map<string, bytes> options = 3;
-}
-
-message Relation {
-  string name = 1;
-  bytes data = 2;
-}
-
-message InsertRelRequest {
-  repeated Relation relations = 1;
-  map<string, bytes> options = 2;
-}
-
-message DeleteRelRequest {
-  repeated Relation relations = 1;
-  map<string, bytes> options = 2;
-}
-
-message StatusResponse {
-  int32 code = 1;
-  string message = 2;
   map<string, bytes> options = 3;
 }
 
