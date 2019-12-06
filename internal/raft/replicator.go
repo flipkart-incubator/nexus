@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"errors"
 	"log"
 
 	"github.com/coreos/etcd/snap"
@@ -27,9 +28,15 @@ func (this *replicator) Replicate(data interface{}) error {
 	return nil
 }
 
-func (this *replicator) Stop() {}
+func (this *replicator) Stop() {
+	close(this.node.stopc)
+	this.store.Close()
+}
 
 func NewReplicator(store db.Store, opts ...pkg_raft.Option) (*replicator, error) {
+	if store == nil {
+		return nil, errors.New("Store must be given")
+	}
 	if options, err := pkg_raft.NewOptions(opts...); err != nil {
 		return nil, err
 	} else {
