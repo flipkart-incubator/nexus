@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type Option func(*options) error
@@ -13,13 +14,15 @@ type Options interface {
 	LogDir() string
 	SnapDir() string
 	ClusterUrls() []string
+	ReplTimeout() time.Duration
 }
 
 type options struct {
-	nodeId     int
-	logDir     string
-	snapDir    string
-	clusterUrl string
+	nodeId      int
+	logDir      string
+	snapDir     string
+	clusterUrl  string
+	replTimeout time.Duration
 }
 
 func (this *options) NodeId() int {
@@ -36,6 +39,10 @@ func (this *options) SnapDir() string {
 
 func (this *options) ClusterUrls() []string {
 	return strings.Split(this.clusterUrl, ",")
+}
+
+func (this *options) ReplTimeout() time.Duration {
+	return this.replTimeout
 }
 
 func NewOptions(opts ...Option) (Options, error) {
@@ -84,6 +91,16 @@ func ClusterUrl(url string) Option {
 			return errors.New("Raft cluster url must not be empty")
 		}
 		opts.clusterUrl = url
+		return nil
+	}
+}
+
+func ReplicationTimeout(timeout time.Duration) Option {
+	return func(opts *options) error {
+		if timeout <= 0 {
+			return errors.New("Replication timeout must strictly be greater than 0")
+		}
+		opts.replTimeout = timeout
 		return nil
 	}
 }

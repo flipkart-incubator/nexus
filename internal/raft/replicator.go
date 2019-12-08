@@ -1,8 +1,10 @@
 package raft
 
 import (
+	"context"
 	"errors"
 	"log"
+	"time"
 
 	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
@@ -16,6 +18,7 @@ type replicator struct {
 	commitChan           <-chan []byte
 	errorChan            <-chan error
 	snapshotterReadyChan <-chan struct{}
+	replTimeout          time.Duration
 }
 
 func (this *replicator) Start() {
@@ -24,7 +27,18 @@ func (this *replicator) Start() {
 	go this.readCommits()
 }
 
-func (this *replicator) Replicate(data interface{}) error {
+func (this *replicator) Replicate(data []byte) error {
+	ctx, cancel := context.WithTimeout(context.Background(), this.replTimeout)
+	defer cancel()
+	if err := this.node.node.Propose(ctx, data); err != nil {
+		log.Printf("[WARN] Error occurred while proposing to Raft. Error: %v. Retrying...", err)
+		retry_ctx, retry_cancel := context.WithTimeout(context.Background(), this.replTimeout)
+		defer retry_cancel()
+		if retry_err := this.node.node.Propose(retry_ctx, data); retry_err != nil {
+			log.Printf("[ERROR] Unable to propose over Raft. Error: %v.", retry_err)
+			return retry_err
+		}
+	}
 	return nil
 }
 
@@ -41,7 +55,7 @@ func NewReplicator(store db.Store, opts ...pkg_raft.Option) (*replicator, error)
 		return nil, err
 	} else {
 		raftNode, commitC, errorC, snapshotterReadyC := NewRaftNode(options, store.Backup)
-		repl := &replicator{node: raftNode, store: store, confChangeCount: uint64(0), commitChan: commitC, errorChan: errorC, snapshotterReadyChan: snapshotterReadyC}
+		repl := &replicator{node: raftNode, store: store, confChangeCount: uint64(0), commitChan: commitC, errorChan: errorC, snapshotterReadyChan: snapshotterReadyC, replTimeout: options.ReplTimeout()}
 		return repl, nil
 	}
 }

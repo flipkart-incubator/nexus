@@ -4,7 +4,7 @@ import "io"
 
 type Store interface {
 	io.Closer
-	Save(interface{}) error
+	Save([]byte) error
 
 	Backup() ([]byte, error)
 	Restore([]byte) error

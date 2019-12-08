@@ -8,7 +8,7 @@ import (
 
 type RaftReplicator interface {
 	Start()
-	Replicate(interface{}) error
+	Replicate([]byte) error
 	Stop()
 }
 

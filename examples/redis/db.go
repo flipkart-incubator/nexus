@@ -17,28 +17,46 @@ type redisStore struct {
 }
 
 type SaveRequest struct {
-	command string
-	key     string
-	val     interface{}
+	Command string
+	Key     string
+	Val     interface{}
+}
+
+func (this *SaveRequest) ToBytes() ([]byte, error) {
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(this); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (this *SaveRequest) String() string {
+	return fmt.Sprintf("%s->%s:%s", this.Command, this.Key, this.Val)
 }
 
 func (this *redisStore) Close() error {
 	return this.cli.Close()
 }
 
-func (this *redisStore) Save(data interface{}) error {
-	if save_req, ok := data.(*SaveRequest); !ok {
-		return errors.New("Given argument to save is not of type *SaveRequest")
+func (this *redisStore) Save(data []byte) error {
+	save_req := SaveRequest{}
+	buf := bytes.NewBuffer(data)
+	if err := gob.NewDecoder(buf).Decode(&save_req); err != nil {
+		return err
 	} else {
-		cmd := strings.ToLower(strings.TrimSpace(save_req.command))
-		switch cmd {
-		case "set":
-			return this.set(save_req.key, save_req.val)
-		case "del":
-			return this.del(save_req.key)
-		default:
-			return errors.New(fmt.Sprintf("Unknown command: '%s'", save_req.command))
-		}
+		return this.save(&save_req)
+	}
+}
+
+func (this *redisStore) save(save_req *SaveRequest) error {
+	cmd := strings.ToLower(strings.TrimSpace(save_req.Command))
+	switch cmd {
+	case "set":
+		return this.set(save_req.Key, save_req.Val)
+	case "del":
+		return this.del(save_req.Key)
+	default:
+		return errors.New(fmt.Sprintf("Unknown command: '%s'", save_req.Command))
 	}
 }
 
