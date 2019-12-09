@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -49,12 +50,12 @@ func save(repl api.RaftReplicator, t time.Time) {
 
 	save_req := &SaveRequest{"SET", key, val}
 	if bts, err := save_req.ToBytes(); err != nil {
-		fmt.Printf("Error occurred while converting SaveRequest: %s to bytes. Error: %v\n", save_req, err)
+		log.Printf("Error occurred while converting SaveRequest: %s to bytes. Error: %v\n", save_req, err)
 	} else {
 		if err := repl.Replicate(bts); err != nil {
-			fmt.Printf("Error occurred while replicating SaveRequest: %s. Error: %v\n", save_req, err)
+			log.Printf("Error occurred while replicating SaveRequest: %s. Error: %v\n", save_req, err)
 		} else {
-			fmt.Printf("Successfully replicated SaveRequest: %s", save_req)
+			log.Printf("Successfully replicated SaveRequest: %s", save_req)
 			ctr++
 		}
 	}
@@ -73,13 +74,14 @@ func main() {
 			raft.ReplicationTimeout(replTimeout),
 		)
 		repl.Start()
-		ticker := time.Tick(5 * time.Second)
+		ticker := time.NewTicker(5 * time.Second)
 		for {
 			select {
-			case t := <-ticker:
+			case t := <-ticker.C:
 				save(repl, t)
 			case sig := <-stopChan:
-				fmt.Printf("[WARN] Caught signal: %v. Shutting down...", sig)
+				log.Printf("[WARN] Caught signal: %v. Shutting down...", sig)
+				ticker.Stop()
 				repl.Stop()
 				break
 			}
