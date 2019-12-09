@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/flipkart-incubator/nexus/examples/redis_repl/store"
 	"github.com/flipkart-incubator/nexus/pkg/api"
 	"github.com/flipkart-incubator/nexus/pkg/raft"
 )
@@ -48,7 +49,7 @@ func save(repl api.RaftReplicator, t time.Time) {
 	key := fmt.Sprintf("%d.Key#%d", nodeId, ctr)
 	val := fmt.Sprintf("%d", t.UnixNano())
 
-	save_req := &SaveRequest{"SET", key, val}
+	save_req := &store.SaveRequest{"SET", key, val}
 	if bts, err := save_req.ToBytes(); err != nil {
 		log.Printf("Error occurred while converting SaveRequest: %s to bytes. Error: %v\n", save_req, err)
 	} else {
@@ -63,7 +64,7 @@ func save(repl api.RaftReplicator, t time.Time) {
 
 func main() {
 	flag.Parse()
-	if db, err := NewRedisDB(redisPort, redisDB); err != nil {
+	if db, err := store.NewRedisDB(redisPort, redisDB); err != nil {
 		panic(err)
 	} else {
 		repl, _ := api.NewRaftReplicator(db,
