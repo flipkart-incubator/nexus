@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"log"
+	"sync/atomic"
 	"time"
 
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
@@ -40,6 +42,11 @@ func (this *replicator) Replicate(data []byte) error {
 		}
 	}
 	return nil
+}
+
+func (this *replicator) ProposeConfigChange(confChange raftpb.ConfChange) {
+	confChange.ID = atomic.AddUint64(&this.confChangeCount, 1)
+	this.node.node.ProposeConfChange(context.TODO(), confChange)
 }
 
 func (this *replicator) Stop() {

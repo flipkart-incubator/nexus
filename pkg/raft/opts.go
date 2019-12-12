@@ -11,6 +11,7 @@ type Option func(*options) error
 
 type Options interface {
 	NodeId() int
+	Join() bool
 	LogDir() string
 	SnapDir() string
 	ClusterUrls() []string
@@ -19,6 +20,7 @@ type Options interface {
 
 type options struct {
 	nodeId      int
+	join        bool
 	logDir      string
 	snapDir     string
 	clusterUrl  string
@@ -27,6 +29,10 @@ type options struct {
 
 func (this *options) NodeId() int {
 	return this.nodeId
+}
+
+func (this *options) Join() bool {
+	return this.join
 }
 
 func (this *options) LogDir() string {
@@ -61,6 +67,13 @@ func NodeId(id int) Option {
 			return errors.New("NodeID must be strictly greater than 0")
 		}
 		opts.nodeId = id
+		return nil
+	}
+}
+
+func Join(join bool) Option {
+	return func(opts *options) error {
+		opts.join = join
 		return nil
 	}
 }

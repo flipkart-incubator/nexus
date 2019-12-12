@@ -87,7 +87,7 @@ func NewRaftNode(opts pkg_raft.Options, getSnapshot func() ([]byte, error)) (*ra
 		errorC:           errorC,
 		id:               opts.NodeId(),
 		peers:            opts.ClusterUrls(),
-		join:             false,
+		join:             opts.Join(),
 		waldir:           opts.LogDir(),
 		snapdir:          opts.SnapDir(),
 		getSnapshot:      getSnapshot,
