@@ -1,6 +1,8 @@
 package api
 
 import (
+	context "context"
+
 	internal_raft "github.com/flipkart-incubator/nexus/internal/raft"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"github.com/flipkart-incubator/nexus/pkg/raft"
@@ -8,7 +10,7 @@ import (
 
 type RaftReplicator interface {
 	Start()
-	Replicate([]byte) error
+	Replicate(context.Context, []byte) error
 	Stop()
 }
 

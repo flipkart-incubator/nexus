@@ -4,8 +4,12 @@
 package api
 
 import (
+	context "context"
 	fmt "fmt"
 	proto "github.com/golang/protobuf/proto"
+	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 	math "math"
 )
 
@@ -20,199 +24,190 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
-type StatusResponse struct {
-	Code                 int32             `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
-	Message              string            `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	Meta                 map[string][]byte `protobuf:"bytes,3,rep,name=meta,proto3" json:"meta,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
-	XXX_unrecognized     []byte            `json:"-"`
-	XXX_sizecache        int32             `json:"-"`
+type ReplicateResponse struct {
+	Code                 int32    `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
+	Message              string   `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *StatusResponse) Reset()         { *m = StatusResponse{} }
-func (m *StatusResponse) String() string { return proto.CompactTextString(m) }
-func (*StatusResponse) ProtoMessage()    {}
-func (*StatusResponse) Descriptor() ([]byte, []int) {
+func (m *ReplicateResponse) Reset()         { *m = ReplicateResponse{} }
+func (m *ReplicateResponse) String() string { return proto.CompactTextString(m) }
+func (*ReplicateResponse) ProtoMessage()    {}
+func (*ReplicateResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_6bc6d570457f57a9, []int{0}
 }
 
-func (m *StatusResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_StatusResponse.Unmarshal(m, b)
+func (m *ReplicateResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ReplicateResponse.Unmarshal(m, b)
 }
-func (m *StatusResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_StatusResponse.Marshal(b, m, deterministic)
+func (m *ReplicateResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ReplicateResponse.Marshal(b, m, deterministic)
 }
-func (m *StatusResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StatusResponse.Merge(m, src)
+func (m *ReplicateResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReplicateResponse.Merge(m, src)
 }
-func (m *StatusResponse) XXX_Size() int {
-	return xxx_messageInfo_StatusResponse.Size(m)
+func (m *ReplicateResponse) XXX_Size() int {
+	return xxx_messageInfo_ReplicateResponse.Size(m)
 }
-func (m *StatusResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_StatusResponse.DiscardUnknown(m)
+func (m *ReplicateResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReplicateResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_StatusResponse proto.InternalMessageInfo
+var xxx_messageInfo_ReplicateResponse proto.InternalMessageInfo
 
-func (m *StatusResponse) GetCode() int32 {
+func (m *ReplicateResponse) GetCode() int32 {
 	if m != nil {
 		return m.Code
 	}
 	return 0
 }
 
-func (m *StatusResponse) GetMessage() string {
+func (m *ReplicateResponse) GetMessage() string {
 	if m != nil {
 		return m.Message
 	}
 	return ""
 }
 
-func (m *StatusResponse) GetMeta() map[string][]byte {
-	if m != nil {
-		return m.Meta
-	}
-	return nil
+type ReplicateRequest struct {
+	Data                 []byte   `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-type SaveKVRequest struct {
-	Key                  []byte            `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Value                []byte            `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	Options              map[string][]byte `protobuf:"bytes,3,rep,name=options,proto3" json:"options,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
-	XXX_unrecognized     []byte            `json:"-"`
-	XXX_sizecache        int32             `json:"-"`
-}
-
-func (m *SaveKVRequest) Reset()         { *m = SaveKVRequest{} }
-func (m *SaveKVRequest) String() string { return proto.CompactTextString(m) }
-func (*SaveKVRequest) ProtoMessage()    {}
-func (*SaveKVRequest) Descriptor() ([]byte, []int) {
+func (m *ReplicateRequest) Reset()         { *m = ReplicateRequest{} }
+func (m *ReplicateRequest) String() string { return proto.CompactTextString(m) }
+func (*ReplicateRequest) ProtoMessage()    {}
+func (*ReplicateRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_6bc6d570457f57a9, []int{1}
 }
 
-func (m *SaveKVRequest) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_SaveKVRequest.Unmarshal(m, b)
+func (m *ReplicateRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ReplicateRequest.Unmarshal(m, b)
 }
-func (m *SaveKVRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_SaveKVRequest.Marshal(b, m, deterministic)
+func (m *ReplicateRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ReplicateRequest.Marshal(b, m, deterministic)
 }
-func (m *SaveKVRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SaveKVRequest.Merge(m, src)
+func (m *ReplicateRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReplicateRequest.Merge(m, src)
 }
-func (m *SaveKVRequest) XXX_Size() int {
-	return xxx_messageInfo_SaveKVRequest.Size(m)
+func (m *ReplicateRequest) XXX_Size() int {
+	return xxx_messageInfo_ReplicateRequest.Size(m)
 }
-func (m *SaveKVRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_SaveKVRequest.DiscardUnknown(m)
+func (m *ReplicateRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReplicateRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_SaveKVRequest proto.InternalMessageInfo
+var xxx_messageInfo_ReplicateRequest proto.InternalMessageInfo
 
-func (m *SaveKVRequest) GetKey() []byte {
+func (m *ReplicateRequest) GetData() []byte {
 	if m != nil {
-		return m.Key
-	}
-	return nil
-}
-
-func (m *SaveKVRequest) GetValue() []byte {
-	if m != nil {
-		return m.Value
-	}
-	return nil
-}
-
-func (m *SaveKVRequest) GetOptions() map[string][]byte {
-	if m != nil {
-		return m.Options
-	}
-	return nil
-}
-
-type DeleteKVRequest struct {
-	Key                  []byte            `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Value                []byte            `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	Options              map[string][]byte `protobuf:"bytes,3,rep,name=options,proto3" json:"options,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
-	XXX_unrecognized     []byte            `json:"-"`
-	XXX_sizecache        int32             `json:"-"`
-}
-
-func (m *DeleteKVRequest) Reset()         { *m = DeleteKVRequest{} }
-func (m *DeleteKVRequest) String() string { return proto.CompactTextString(m) }
-func (*DeleteKVRequest) ProtoMessage()    {}
-func (*DeleteKVRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_6bc6d570457f57a9, []int{2}
-}
-
-func (m *DeleteKVRequest) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_DeleteKVRequest.Unmarshal(m, b)
-}
-func (m *DeleteKVRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_DeleteKVRequest.Marshal(b, m, deterministic)
-}
-func (m *DeleteKVRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DeleteKVRequest.Merge(m, src)
-}
-func (m *DeleteKVRequest) XXX_Size() int {
-	return xxx_messageInfo_DeleteKVRequest.Size(m)
-}
-func (m *DeleteKVRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_DeleteKVRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_DeleteKVRequest proto.InternalMessageInfo
-
-func (m *DeleteKVRequest) GetKey() []byte {
-	if m != nil {
-		return m.Key
-	}
-	return nil
-}
-
-func (m *DeleteKVRequest) GetValue() []byte {
-	if m != nil {
-		return m.Value
-	}
-	return nil
-}
-
-func (m *DeleteKVRequest) GetOptions() map[string][]byte {
-	if m != nil {
-		return m.Options
+		return m.Data
 	}
 	return nil
 }
 
 func init() {
-	proto.RegisterType((*StatusResponse)(nil), "nexus.api.StatusResponse")
-	proto.RegisterMapType((map[string][]byte)(nil), "nexus.api.StatusResponse.MetaEntry")
-	proto.RegisterType((*SaveKVRequest)(nil), "nexus.api.SaveKVRequest")
-	proto.RegisterMapType((map[string][]byte)(nil), "nexus.api.SaveKVRequest.OptionsEntry")
-	proto.RegisterType((*DeleteKVRequest)(nil), "nexus.api.DeleteKVRequest")
-	proto.RegisterMapType((map[string][]byte)(nil), "nexus.api.DeleteKVRequest.OptionsEntry")
+	proto.RegisterType((*ReplicateResponse)(nil), "nexus.api.ReplicateResponse")
+	proto.RegisterType((*ReplicateRequest)(nil), "nexus.api.ReplicateRequest")
 }
 
 func init() { proto.RegisterFile("nexus.proto", fileDescriptor_6bc6d570457f57a9) }
 
 var fileDescriptor_6bc6d570457f57a9 = []byte{
-	// 267 bytes of a gzipped FileDescriptorProto
+	// 165 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0xce, 0x4b, 0xad, 0x28,
-	0x2d, 0xd6, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0xe2, 0x84, 0x70, 0x12, 0x0b, 0x32, 0x95, 0x36,
-	0x30, 0x72, 0xf1, 0x05, 0x97, 0x24, 0x96, 0x94, 0x16, 0x07, 0xa5, 0x16, 0x17, 0xe4, 0xe7, 0x15,
-	0xa7, 0x0a, 0x09, 0x71, 0xb1, 0x24, 0xe7, 0xa7, 0xa4, 0x4a, 0x30, 0x2a, 0x30, 0x6a, 0xb0, 0x06,
-	0x81, 0xd9, 0x42, 0x12, 0x5c, 0xec, 0xb9, 0xa9, 0xc5, 0xc5, 0x89, 0xe9, 0xa9, 0x12, 0x4c, 0x0a,
-	0x8c, 0x1a, 0x9c, 0x41, 0x30, 0xae, 0x90, 0x39, 0x17, 0x4b, 0x6e, 0x6a, 0x49, 0xa2, 0x04, 0xb3,
-	0x02, 0xb3, 0x06, 0xb7, 0x91, 0xb2, 0x1e, 0xdc, 0x68, 0x3d, 0x54, 0x63, 0xf5, 0x7c, 0x53, 0x4b,
-	0x12, 0x5d, 0xf3, 0x4a, 0x8a, 0x2a, 0x83, 0xc0, 0x1a, 0xa4, 0xcc, 0xb9, 0x38, 0xe1, 0x42, 0x42,
-	0x02, 0x5c, 0xcc, 0xd9, 0xa9, 0x95, 0x60, 0x2b, 0x39, 0x83, 0x40, 0x4c, 0x21, 0x11, 0x2e, 0xd6,
-	0xb2, 0xc4, 0x9c, 0x52, 0x88, 0x7d, 0x3c, 0x41, 0x10, 0x8e, 0x15, 0x93, 0x05, 0xa3, 0xd2, 0x16,
-	0x46, 0x2e, 0xde, 0xe0, 0xc4, 0xb2, 0x54, 0xef, 0xb0, 0xa0, 0xd4, 0xc2, 0xd2, 0xd4, 0xe2, 0x12,
-	0x64, 0xdd, 0x3c, 0x78, 0x74, 0x0b, 0xd9, 0x73, 0xb1, 0xe7, 0x17, 0x94, 0x64, 0xe6, 0xe7, 0x15,
-	0x43, 0x9d, 0xab, 0x8a, 0xec, 0x5c, 0x64, 0x23, 0xf5, 0xfc, 0x21, 0xea, 0x20, 0x0e, 0x86, 0xe9,
-	0x92, 0xb2, 0xe2, 0xe2, 0x41, 0x96, 0x20, 0xc9, 0xd9, 0x3b, 0x18, 0xb9, 0xf8, 0x5d, 0x52, 0x73,
-	0x52, 0x4b, 0xc8, 0x70, 0xb8, 0x23, 0xba, 0xc3, 0xd5, 0x91, 0x1c, 0x8e, 0x66, 0x28, 0xf5, 0x9d,
-	0xee, 0xc4, 0x1a, 0xc5, 0x9c, 0x58, 0x90, 0x99, 0xc4, 0x06, 0x4e, 0x3d, 0xc6, 0x80, 0x00, 0x00,
-	0x00, 0xff, 0xff, 0x27, 0x3d, 0x4a, 0x9f, 0x4c, 0x02, 0x00, 0x00,
+	0x2d, 0xd6, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0xe2, 0x84, 0x70, 0x12, 0x0b, 0x32, 0x95, 0x1c,
+	0xb9, 0x04, 0x83, 0x52, 0x0b, 0x72, 0x32, 0x93, 0x13, 0x4b, 0x52, 0x83, 0x52, 0x8b, 0x0b, 0xf2,
+	0xf3, 0x8a, 0x53, 0x85, 0x84, 0xb8, 0x58, 0x92, 0xf3, 0x53, 0x52, 0x25, 0x18, 0x15, 0x18, 0x35,
+	0x58, 0x83, 0xc0, 0x6c, 0x21, 0x09, 0x2e, 0xf6, 0xdc, 0xd4, 0xe2, 0xe2, 0xc4, 0xf4, 0x54, 0x09,
+	0x26, 0x05, 0x46, 0x0d, 0xce, 0x20, 0x18, 0x57, 0x49, 0x8d, 0x4b, 0x00, 0xc9, 0x88, 0xc2, 0xd2,
+	0xd4, 0xe2, 0x12, 0x90, 0x09, 0x29, 0x89, 0x25, 0x89, 0x60, 0x13, 0x78, 0x82, 0xc0, 0x6c, 0x23,
+	0x7f, 0x2e, 0x56, 0x3f, 0x90, 0xbd, 0x42, 0x6e, 0x5c, 0x9c, 0x70, 0x0d, 0x42, 0xd2, 0x7a, 0x70,
+	0xc7, 0xe8, 0xa1, 0x1b, 0x23, 0x25, 0x83, 0x5d, 0x12, 0xe2, 0x4c, 0x27, 0xd6, 0x28, 0xe6, 0xc4,
+	0x82, 0xcc, 0x24, 0x36, 0xb0, 0xa7, 0x8c, 0x01, 0x01, 0x00, 0x00, 0xff, 0xff, 0x34, 0xcc, 0xf4,
+	0xfd, 0xe3, 0x00, 0x00, 0x00,
+}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the grpc package it is being compiled against.
+const _ = grpc.SupportPackageIsVersion4
+
+// NexusClient is the client API for Nexus service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type NexusClient interface {
+	Replicate(ctx context.Context, in *ReplicateRequest, opts ...grpc.CallOption) (*ReplicateResponse, error)
+}
+
+type nexusClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewNexusClient(cc *grpc.ClientConn) NexusClient {
+	return &nexusClient{cc}
+}
+
+func (c *nexusClient) Replicate(ctx context.Context, in *ReplicateRequest, opts ...grpc.CallOption) (*ReplicateResponse, error) {
+	out := new(ReplicateResponse)
+	err := c.cc.Invoke(ctx, "/nexus.api.Nexus/Replicate", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// NexusServer is the server API for Nexus service.
+type NexusServer interface {
+	Replicate(context.Context, *ReplicateRequest) (*ReplicateResponse, error)
+}
+
+// UnimplementedNexusServer can be embedded to have forward compatible implementations.
+type UnimplementedNexusServer struct {
+}
+
+func (*UnimplementedNexusServer) Replicate(ctx context.Context, req *ReplicateRequest) (*ReplicateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Replicate not implemented")
+}
+
+func RegisterNexusServer(s *grpc.Server, srv NexusServer) {
+	s.RegisterService(&_Nexus_serviceDesc, srv)
+}
+
+func _Nexus_Replicate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReplicateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NexusServer).Replicate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/nexus.api.Nexus/Replicate",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NexusServer).Replicate(ctx, req.(*ReplicateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _Nexus_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "nexus.api.Nexus",
+	HandlerType: (*NexusServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Replicate",
+			Handler:    _Nexus_Replicate_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "nexus.proto",
 }

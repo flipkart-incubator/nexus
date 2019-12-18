@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -53,7 +54,7 @@ func save(repl api.RaftReplicator, t time.Time) {
 	if bts, err := save_req.ToBytes(); err != nil {
 		log.Printf("Error occurred while converting SaveRequest: %s to bytes. Error: %v\n", save_req, err)
 	} else {
-		if err := repl.Replicate(bts); err != nil {
+		if err := repl.Replicate(context.Background(), bts); err != nil {
 			log.Printf("Error occurred while replicating SaveRequest: %s. Error: %v\n", save_req, err)
 		} else {
 			log.Printf("Successfully replicated SaveRequest: %s", save_req)

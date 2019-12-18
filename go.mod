@@ -15,7 +15,7 @@ require (
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	go.uber.org/zap v1.13.0 // indirect
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
-	google.golang.org/grpc v1.25.1 // indirect
+	google.golang.org/grpc v1.25.1
 )
 
 replace github.com/coreos/go-systemd => ./vendor/github.com/coreos/go-systemd

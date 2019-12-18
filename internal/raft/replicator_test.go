@@ -2,6 +2,7 @@ package raft
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -175,7 +176,7 @@ func (this *peer) replicate(t *testing.T, req *kvReq) {
 	if bts, err := req.toBytes(); err != nil {
 		t.Fatal(err)
 	} else {
-		if err := this.repl.Replicate(bts); err != nil {
+		if err := this.repl.Replicate(context.Background(), bts); err != nil {
 			t.Fatal(err)
 		} else {
 			sleep(1)

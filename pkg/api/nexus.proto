@@ -2,21 +2,15 @@ syntax = "proto3";
 package nexus.api;
 option go_package = "api";
 
-message StatusResponse {
+message ReplicateResponse {
   int32 code = 1;
   string message = 2;
-  map<string, bytes> meta = 3;
 }
 
-message SaveKVRequest {
-  bytes key = 1;
-  bytes value = 2;
-  map<string, bytes> options = 3;
+message ReplicateRequest {
+  bytes data = 1;
 }
 
-message DeleteKVRequest {
-  bytes key = 1;
-  bytes value = 2;
-  map<string, bytes> options = 3;
+service Nexus {
+  rpc Replicate (ReplicateRequest) returns (ReplicateResponse);
 }
-

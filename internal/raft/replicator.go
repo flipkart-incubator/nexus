@@ -29,12 +29,12 @@ func (this *replicator) Start() {
 	go this.readCommits()
 }
 
-func (this *replicator) Replicate(data []byte) error {
-	ctx, cancel := context.WithTimeout(context.Background(), this.replTimeout)
+func (this *replicator) Replicate(ctx context.Context, data []byte) error {
+	child_ctx, cancel := context.WithTimeout(ctx, this.replTimeout)
 	defer cancel()
-	if err := this.node.node.Propose(ctx, data); err != nil {
+	if err := this.node.node.Propose(child_ctx, data); err != nil {
 		log.Printf("[WARN] Error occurred while proposing to Raft. Error: %v. Retrying...", err)
-		retry_ctx, retry_cancel := context.WithTimeout(context.Background(), this.replTimeout)
+		retry_ctx, retry_cancel := context.WithTimeout(ctx, this.replTimeout)
 		defer retry_cancel()
 		if retry_err := this.node.node.Propose(retry_ctx, data); retry_err != nil {
 			log.Printf("[ERROR] Unable to propose over Raft. Error: %v.", retry_err)
