@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/flipkart-incubator/nexus/examples/redis_repl/store"
+	"github.com/flipkart-incubator/nexus/internal/grpc"
 	"github.com/flipkart-incubator/nexus/pkg/api"
 	"github.com/flipkart-incubator/nexus/pkg/raft"
 )
@@ -23,6 +24,7 @@ func setupSignalNotify() <-chan os.Signal {
 var (
 	stopChan   <-chan os.Signal
 	nodeId     int
+	port       uint
 	logDir     string
 	snapDir    string
 	clusterUrl string
@@ -34,6 +36,7 @@ const replTimeout = 5 * time.Second
 
 func init() {
 	flag.IntVar(&nodeId, "nodeId", -1, "Node ID (> 0) of the current node")
+	flag.UintVar(&port, "grpcPort", 0, "Port on which Nexus GRPC server listens")
 	flag.StringVar(&logDir, "logDir", "/tmp/logs", "Dir for storing RAFT logs")
 	flag.StringVar(&snapDir, "snapDir", "/tmp/snap", "Dir for storing RAFT snapshots")
 	flag.StringVar(&clusterUrl, "clusterUrl", "", "Comma separated list of Nexus URLs")
@@ -54,9 +57,10 @@ func main() {
 			raft.ClusterUrl(clusterUrl),
 			raft.ReplicationTimeout(replTimeout),
 		)
-		repl.Start()
+		ns := grpc.NewNexusService(port, repl)
+		go ns.ListenAndServe()
 		sig := <-stopChan
 		log.Printf("[WARN] Caught signal: %v. Shutting down...", sig)
-		repl.Stop()
+		ns.Close()
 	}
 }

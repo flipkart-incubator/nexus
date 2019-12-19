@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/go-redis/redis"
@@ -20,6 +21,21 @@ type SaveRequest struct {
 	Command string
 	Key     string
 	Val     interface{}
+}
+
+var spaceRegex = regexp.MustCompile("\\s+")
+
+func NewSaveRequest(cmd string) (*SaveRequest, error) {
+	splits := spaceRegex.Split(cmd, -1)
+	if len(splits) < 2 || len(splits) > 3 {
+		return nil, errors.New("Invalid command. Format: [set|del] <key> (<val>)")
+	}
+	cmd, key := splits[0], splits[1]
+	var val interface{}
+	if len(splits) == 3 {
+		val = splits[2]
+	}
+	return &SaveRequest{cmd, key, val}, nil
 }
 
 func (this *SaveRequest) ToBytes() ([]byte, error) {

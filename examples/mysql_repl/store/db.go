@@ -65,11 +65,12 @@ func (this *mysqlStore) save(sqlStmt string) error {
 	if tx, err := this.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable}); err != nil {
 		return err
 	} else {
+		log.Printf("About to execute SQL: %s", sqlStmt)
 		if _, err := tx.ExecContext(ctx, sqlStmt); err != nil {
 			tx.Rollback() // TODO: Ignore rollback errors ?
 			return err
 		} else {
-			log.Printf("Successfully executed SQL: %s\n", sqlStmt)
+			log.Printf("Successfully executed SQL: %s", sqlStmt)
 			return tx.Commit()
 		}
 	}
