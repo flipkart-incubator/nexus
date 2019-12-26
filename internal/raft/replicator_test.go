@@ -33,6 +33,7 @@ func TestReplicator(t *testing.T) {
 
 	t.Run("testSaveData", testSaveData)
 	t.Run("testForNewNexusNodeJoiningCluster", testForNewNexusNodeJoiningCluster)
+	t.Run("testForNodeRestart", testForNodeRestart)
 }
 
 func testSaveData(t *testing.T) {
@@ -70,6 +71,27 @@ func testForNewNexusNodeJoiningCluster(t *testing.T) {
 			t.Errorf("DB Mismatch !!! Expected: %v, Actual: %v", db4, db1)
 		}
 	}
+}
+
+func testForNodeRestart(t *testing.T) {
+	peer2 := clus.peers[1]
+	reqs := []*kvReq{&kvReq{"hello", "world"}, &kvReq{"foo", "bar"}}
+	peer2.replicate(t, reqs[0])
+	peer2.replicate(t, reqs[1])
+	clus.assertDB(t, reqs...)
+
+	peer2.stop()
+	sleep(3)
+	old_db := peer2.db
+	var err error
+	peer2, err = newPeerWithDB(2, old_db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clus.peers[1] = peer2
+	peer2.start()
+	sleep(3)
+	clus.assertDB(t, reqs...)
 }
 
 func startCluster(t *testing.T) *cluster {
@@ -131,8 +153,7 @@ type peer struct {
 	repl *replicator
 }
 
-func newPeer(id int) (*peer, error) {
-	db := newInMemKVStore()
+func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 	repl, err := NewReplicator(db,
 		raft.NodeId(id),
 		raft.LogDir(logDir),
@@ -145,6 +166,11 @@ func newPeer(id int) (*peer, error) {
 	} else {
 		return &peer{id, db, repl}, nil
 	}
+}
+
+func newPeer(id int) (*peer, error) {
+	db := newInMemKVStore()
+	return newPeerWithDB(id, db)
 }
 
 func newJoiningPeer(id int, clusUrl string) (*peer, error) {
@@ -233,8 +259,13 @@ func (this *inMemKVStore) Save(data []byte) error {
 	if kvReq, err := fromBytes(data); err != nil {
 		return err
 	} else {
-		this.content[kvReq.Key] = kvReq.Val
-		return nil
+		key := kvReq.Key
+		if _, present := this.content[key]; present {
+			return errors.New(fmt.Sprintf("Given key: %s already exists", key))
+		} else {
+			this.content[key] = kvReq.Val
+			return nil
+		}
 	}
 }
 
