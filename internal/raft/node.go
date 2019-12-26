@@ -337,7 +337,7 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 	rc.appliedIndex = snapshotToSave.Metadata.Index
 }
 
-var snapshotCatchUpEntriesN uint64 = 0
+var snapshotCatchUpEntriesN uint64 = 10000
 
 func (rc *raftNode) maybeTriggerSnapshot() {
 	if rc.appliedIndex-rc.snapshotIndex <= rc.snapCount {
@@ -357,15 +357,14 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 		panic(err)
 	}
 
-	compactIndex := uint64(1)
 	if rc.appliedIndex > snapshotCatchUpEntriesN {
-		compactIndex = rc.appliedIndex - snapshotCatchUpEntriesN
-	}
-	if err := rc.raftStorage.Compact(compactIndex); err != nil {
-		panic(err)
+		compactIndex := rc.appliedIndex - snapshotCatchUpEntriesN
+		if err := rc.raftStorage.Compact(compactIndex); err != nil {
+			panic(err)
+		}
+		log.Printf("compacted log at index %d", compactIndex)
 	}
 
-	log.Printf("compacted log at index %d", compactIndex)
 	rc.snapshotIndex = rc.appliedIndex
 }
 

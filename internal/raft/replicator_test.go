@@ -82,16 +82,21 @@ func testForNodeRestart(t *testing.T) {
 
 	peer2.stop()
 	sleep(3)
-	old_db := peer2.db
+
+	peer1 := clus.peers[0]
+	new_reqs := []*kvReq{&kvReq{"micro", "soft"}, &kvReq{"wel", "come"}}
+	peer1.replicate(t, new_reqs[0])
+	peer1.replicate(t, new_reqs[1])
+
 	var err error
-	peer2, err = newPeerWithDB(2, old_db)
+	peer2, err = newPeerWithDB(2, peer2.db)
 	if err != nil {
 		t.Fatal(err)
 	}
 	clus.peers[1] = peer2
 	peer2.start()
 	sleep(3)
-	clus.assertDB(t, reqs...)
+	clus.assertDB(t, new_reqs...)
 }
 
 func startCluster(t *testing.T) *cluster {
@@ -213,9 +218,9 @@ func (this *peer) replicate(t *testing.T, req *kvReq) {
 func (this *peer) assertDB(t *testing.T, reqs ...*kvReq) {
 	for _, req := range reqs {
 		if data, present := this.db.content[req.Key]; !present {
-			t.Errorf("Expected key: %s to be present. But not found.", req.Key)
+			t.Errorf("peer %d -> Expected key: %s to be present. But not found.", this.id, req.Key)
 		} else if !reflect.DeepEqual(data, req.Val) {
-			t.Errorf("Value mismatch !!! Expected: %q, Actual: %q", req.Val, data)
+			t.Errorf("peer %d -> Value mismatch !!! Expected: %q, Actual: %q", this.id, req.Val, data)
 		}
 	}
 }
