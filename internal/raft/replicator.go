@@ -1,12 +1,16 @@
 package raft
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"errors"
 	"log"
 	"sync/atomic"
 	"time"
 
+	"github.com/coreos/etcd/pkg/idutil"
+	"github.com/coreos/etcd/pkg/wait"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
@@ -21,6 +25,36 @@ type replicator struct {
 	errorChan            <-chan error
 	snapshotterReadyChan <-chan struct{}
 	replTimeout          time.Duration
+	waiter               wait.Wait
+	idGen                *idutil.Generator
+}
+
+type internalNexusRequest struct {
+	ID  uint64
+	Req []byte
+}
+
+type internalNexusResponse struct {
+	Res []byte
+	Err error
+}
+
+func (this *internalNexusRequest) marshal() ([]byte, error) {
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(this); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func unmarshal(data []byte) (*internalNexusRequest, error) {
+	save_req := internalNexusRequest{}
+	buf := bytes.NewBuffer(data)
+	if err := gob.NewDecoder(buf).Decode(&save_req); err != nil {
+		return nil, err
+	} else {
+		return &save_req, nil
+	}
 }
 
 func (this *replicator) Start() {
@@ -30,18 +64,30 @@ func (this *replicator) Start() {
 }
 
 func (this *replicator) Replicate(ctx context.Context, data []byte) error {
-	child_ctx, cancel := context.WithTimeout(ctx, this.replTimeout)
-	defer cancel()
-	if err := this.node.node.Propose(child_ctx, data); err != nil {
-		log.Printf("[WARN] Error occurred while proposing to Raft. Error: %v. Retrying...", err)
-		retry_ctx, retry_cancel := context.WithTimeout(ctx, this.replTimeout)
-		defer retry_cancel()
-		if retry_err := this.node.node.Propose(retry_ctx, data); retry_err != nil {
-			log.Printf("[ERROR] Unable to propose over Raft. Error: %v.", retry_err)
-			return retry_err
+	repl_req := &internalNexusRequest{this.idGen.Next(), data}
+	if repl_req_data, err := repl_req.marshal(); err != nil {
+		return err
+	} else {
+		ch := this.waiter.Register(repl_req.ID)
+		child_ctx, cancel := context.WithTimeout(ctx, this.replTimeout)
+		defer cancel()
+		if err := this.node.node.Propose(child_ctx, repl_req_data); err != nil {
+			log.Printf("[WARN] Error occurred while proposing to Raft. Message: %v.", err)
+			this.waiter.Trigger(repl_req.ID, nil)
+			return err
+		}
+		select {
+		case res := <-ch:
+			if repl_res := res.(*internalNexusResponse); repl_res.Err != nil {
+				return repl_res.Err
+			} else {
+				return nil
+			}
+		case <-child_ctx.Done():
+			this.waiter.Trigger(repl_req.ID, nil)
+			return child_ctx.Err()
 		}
 	}
-	return nil
 }
 
 func (this *replicator) ProposeConfigChange(confChange raftpb.ConfChange) {
@@ -62,7 +108,17 @@ func NewReplicator(store db.Store, opts ...pkg_raft.Option) (*replicator, error)
 		return nil, err
 	} else {
 		raftNode, commitC, errorC, snapshotterReadyC := NewRaftNode(options, store.Backup)
-		repl := &replicator{node: raftNode, store: store, confChangeCount: uint64(0), commitChan: commitC, errorChan: errorC, snapshotterReadyChan: snapshotterReadyC, replTimeout: options.ReplTimeout()}
+		repl := &replicator{
+			node:                 raftNode,
+			store:                store,
+			confChangeCount:      uint64(0),
+			commitChan:           commitC,
+			errorChan:            errorC,
+			snapshotterReadyChan: snapshotterReadyC,
+			replTimeout:          options.ReplTimeout(),
+			waiter:               wait.New(),
+			idGen:                idutil.NewGenerator(uint16(options.NodeId()), time.Now()),
+		}
 		return repl, nil
 	}
 }
@@ -84,10 +140,12 @@ func (this *replicator) readCommits() {
 				log.Panic(err)
 			}
 		} else {
-			if err := this.store.Save(data); err != nil {
+			repl_res := internalNexusResponse{}
+			if repl_req, err := unmarshal(data); err != nil {
 				log.Fatal(err)
 			} else {
-				log.Printf("[%d] Successfully saved data", this.node.id)
+				repl_res.Err = this.store.Save(repl_req.Req)
+				this.waiter.Trigger(repl_req.ID, &repl_res)
 			}
 		}
 	}
