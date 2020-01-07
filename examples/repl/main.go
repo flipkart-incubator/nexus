@@ -64,8 +64,8 @@ func replMySQL(nexus_url string) {
 			fmt.Println(err.Error())
 		} else {
 			fmt.Println("OK")
-			fmt.Print("mysql> ")
 		}
+		fmt.Print("mysql> ")
 	}
 }
 
@@ -81,8 +81,8 @@ func replRedis(nexus_url string) {
 			fmt.Println(err.Error())
 		} else {
 			fmt.Println("OK")
-			fmt.Print("redis> ")
 		}
+		fmt.Print("redis> ")
 	}
 }
 
