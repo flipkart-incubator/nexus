@@ -12,7 +12,7 @@ import (
 )
 
 func printUsage() {
-	fmt.Printf("Usage: %s <mysql|redis> <nexus_url>\n", os.Args[0])
+	fmt.Printf("Usage: %s <mysql|redis> <nexus_url> [<expression>]\n", os.Args[0])
 }
 
 func newNexusClient(nexus_url string) *grpc.NexusClient {
@@ -52,6 +52,17 @@ func sendRedisCmd(nc *grpc.NexusClient, cmd string) error {
 	}
 }
 
+func sendMySQL(nexus_url string, cmd string) {
+	nc := newNexusClient(nexus_url)
+	defer nc.Close()
+
+	if err := sendMySQLCmd(nc, str.TrimSpace(cmd)); err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println("OK")
+	}
+}
+
 func replMySQL(nexus_url string) {
 	nc := newNexusClient(nexus_url)
 	defer nc.Close()
@@ -66,6 +77,17 @@ func replMySQL(nexus_url string) {
 			fmt.Println("OK")
 		}
 		fmt.Print("mysql> ")
+	}
+}
+
+func sendRedis(nexus_url string, cmd string) {
+	nc := newNexusClient(nexus_url)
+	defer nc.Close()
+
+	if err := sendRedisCmd(nc, str.TrimSpace(cmd)); err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println("OK")
 	}
 }
 
@@ -87,17 +109,26 @@ func replRedis(nexus_url string) {
 }
 
 func main() {
-	if len(os.Args) != 3 {
+	arg_len := len(os.Args)
+	if arg_len < 3 || arg_len > 4 {
 		printUsage()
 		return
 	}
 
-	db, nexus_url := str.ToLower(str.TrimSpace(os.Args[1])), str.TrimSpace(os.Args[2])
+	db, nexus_url, repl_mode := str.ToLower(str.TrimSpace(os.Args[1])), str.TrimSpace(os.Args[2]), arg_len == 3
 	switch db {
 	case "mysql":
-		replMySQL(nexus_url)
+		if repl_mode {
+			replMySQL(nexus_url)
+		} else {
+			sendMySQL(nexus_url, os.Args[3])
+		}
 	case "redis":
-		replRedis(nexus_url)
+		if repl_mode {
+			replRedis(nexus_url)
+		} else {
+			sendRedis(nexus_url, os.Args[3])
+		}
 	default:
 		printUsage()
 	}
