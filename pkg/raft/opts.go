@@ -2,6 +2,7 @@ package raft
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"strings"
 	"time"
@@ -27,6 +28,41 @@ type options struct {
 	replTimeout time.Duration
 }
 
+var (
+	opts              options
+	replTimeoutInSecs int64
+)
+
+func init() {
+	flag.IntVar(&opts.nodeId, "nexusNodeId", -1, "Node ID (> 0) of the current node")
+	flag.BoolVar(&opts.join, "nexusJoin", false, "Join an existing Nexus cluster (default false)")
+	flag.StringVar(&opts.logDir, "nexusLogDir", "/tmp/logs", "Dir for storing RAFT logs")
+	flag.StringVar(&opts.snapDir, "nexusSnapDir", "/tmp/snap", "Dir for storing RAFT snapshots")
+	flag.StringVar(&opts.clusterUrl, "nexusClusterUrl", "", "Comma separated list of Nexus URLs")
+	flag.Int64Var(&replTimeoutInSecs, "nexusReplTimeout", 5, "Replication timeout in seconds")
+}
+
+func OptionsFromFlags() []Option {
+	return []Option{
+		NodeId(opts.nodeId),
+		Join(opts.join),
+		LogDir(opts.logDir),
+		SnapDir(opts.snapDir),
+		ClusterUrl(opts.clusterUrl),
+		ReplicationTimeout(time.Duration(replTimeoutInSecs) * time.Second),
+	}
+}
+
+func NewOptions(opts ...Option) (Options, error) {
+	options := &options{}
+	for _, opt := range opts {
+		if err := opt(options); err != nil {
+			return nil, err
+		}
+	}
+	return options, nil
+}
+
 func (this *options) NodeId() int {
 	return this.nodeId
 }
@@ -49,16 +85,6 @@ func (this *options) ClusterUrls() []string {
 
 func (this *options) ReplTimeout() time.Duration {
 	return this.replTimeout
-}
-
-func NewOptions(opts ...Option) (Options, error) {
-	options := &options{}
-	for _, opt := range opts {
-		if err := opt(options); err != nil {
-			return nil, err
-		}
-	}
-	return options, nil
 }
 
 func NodeId(id int) Option {

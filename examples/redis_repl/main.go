@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/flipkart-incubator/nexus/examples/redis_repl/store"
 	"github.com/flipkart-incubator/nexus/internal/grpc"
@@ -22,24 +21,14 @@ func setupSignalNotify() <-chan os.Signal {
 }
 
 var (
-	stopChan   <-chan os.Signal
-	nodeId     int
-	port       uint
-	logDir     string
-	snapDir    string
-	clusterUrl string
-	redisPort  int
-	redisDB    int
+	stopChan  <-chan os.Signal
+	port      uint
+	redisPort int
+	redisDB   int
 )
 
-const replTimeout = 5 * time.Second
-
 func init() {
-	flag.IntVar(&nodeId, "nodeId", -1, "Node ID (> 0) of the current node")
 	flag.UintVar(&port, "grpcPort", 0, "Port on which Nexus GRPC server listens")
-	flag.StringVar(&logDir, "logDir", "/tmp/logs", "Dir for storing RAFT logs")
-	flag.StringVar(&snapDir, "snapDir", "/tmp/snap", "Dir for storing RAFT snapshots")
-	flag.StringVar(&clusterUrl, "clusterUrl", "", "Comma separated list of Nexus URLs")
 	flag.IntVar(&redisPort, "redisPort", 6379, "Redis port")
 	flag.IntVar(&redisDB, "redisDB", 0, "Redis DB Index")
 	stopChan = setupSignalNotify()
@@ -50,13 +39,7 @@ func main() {
 	if db, err := store.NewRedisDB(redisPort, redisDB); err != nil {
 		panic(err)
 	} else {
-		repl, _ := api.NewRaftReplicator(db,
-			raft.NodeId(nodeId),
-			raft.LogDir(logDir),
-			raft.SnapDir(snapDir),
-			raft.ClusterUrl(clusterUrl),
-			raft.ReplicationTimeout(replTimeout),
-		)
+		repl, _ := api.NewRaftReplicator(db, raft.OptionsFromFlags()...)
 		ns := grpc.NewNexusService(port, repl)
 		go ns.ListenAndServe()
 		sig := <-stopChan
