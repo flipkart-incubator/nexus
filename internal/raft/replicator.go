@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
-	"errors"
 	"log"
 	"sync/atomic"
 	"time"
@@ -100,27 +99,20 @@ func (this *replicator) Stop() {
 	this.store.Close()
 }
 
-func NewReplicator(store db.Store, opts ...pkg_raft.Option) (*replicator, error) {
-	if store == nil {
-		return nil, errors.New("Store must be given")
+func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
+	raftNode, commitC, errorC, snapshotterReadyC := NewRaftNode(options, store.Backup)
+	repl := &replicator{
+		node:                 raftNode,
+		store:                store,
+		confChangeCount:      uint64(0),
+		commitChan:           commitC,
+		errorChan:            errorC,
+		snapshotterReadyChan: snapshotterReadyC,
+		replTimeout:          options.ReplTimeout(),
+		waiter:               wait.New(),
+		idGen:                idutil.NewGenerator(uint16(options.NodeId()), time.Now()),
 	}
-	if options, err := pkg_raft.NewOptions(opts...); err != nil {
-		return nil, err
-	} else {
-		raftNode, commitC, errorC, snapshotterReadyC := NewRaftNode(options, store.Backup)
-		repl := &replicator{
-			node:                 raftNode,
-			store:                store,
-			confChangeCount:      uint64(0),
-			commitChan:           commitC,
-			errorChan:            errorC,
-			snapshotterReadyChan: snapshotterReadyC,
-			replTimeout:          options.ReplTimeout(),
-			waiter:               wait.New(),
-			idGen:                idutil.NewGenerator(uint16(options.NodeId()), time.Now()),
-		}
-		return repl, nil
-	}
+	return repl
 }
 
 func (this *replicator) readCommits() {
