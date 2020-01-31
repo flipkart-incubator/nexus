@@ -159,7 +159,7 @@ type peer struct {
 }
 
 func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
-	repl, err := NewReplicator(db,
+	opts, err := raft.NewOptions(
 		raft.NodeId(id),
 		raft.LogDir(logDir),
 		raft.SnapDir(snapDir),
@@ -169,6 +169,7 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 	if err != nil {
 		return nil, err
 	} else {
+		repl := NewReplicator(db, opts)
 		return &peer{id, db, repl}, nil
 	}
 }
@@ -179,8 +180,7 @@ func newPeer(id int) (*peer, error) {
 }
 
 func newJoiningPeer(id int, clusUrl string) (*peer, error) {
-	db := newInMemKVStore()
-	repl, err := NewReplicator(db,
+	opts, err := raft.NewOptions(
 		raft.NodeId(id),
 		raft.LogDir(logDir),
 		raft.SnapDir(snapDir),
@@ -191,6 +191,8 @@ func newJoiningPeer(id int, clusUrl string) (*peer, error) {
 	if err != nil {
 		return nil, err
 	} else {
+		db := newInMemKVStore()
+		repl := NewReplicator(db, opts)
 		return &peer{id, db, repl}, nil
 	}
 }
@@ -207,7 +209,7 @@ func (this *peer) replicate(t *testing.T, req *kvReq) {
 	if bts, err := req.toBytes(); err != nil {
 		t.Fatal(err)
 	} else {
-		if err := this.repl.Replicate(context.Background(), bts); err != nil {
+		if _, err := this.repl.Replicate(context.Background(), bts); err != nil {
 			t.Fatal(err)
 		} else {
 			sleep(1)
@@ -260,16 +262,16 @@ func (this *inMemKVStore) Close() error {
 	return nil
 }
 
-func (this *inMemKVStore) Save(data []byte) error {
+func (this *inMemKVStore) Save(data []byte) ([]byte, error) {
 	if kvReq, err := fromBytes(data); err != nil {
-		return err
+		return nil, err
 	} else {
 		key := kvReq.Key
 		if _, present := this.content[key]; present {
-			return errors.New(fmt.Sprintf("Given key: %s already exists", key))
+			return nil, errors.New(fmt.Sprintf("Given key: %s already exists", key))
 		} else {
 			this.content[key] = kvReq.Val
-			return nil
+			return nil, nil
 		}
 	}
 }

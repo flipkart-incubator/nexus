@@ -11,7 +11,7 @@ import (
 
 type RaftReplicator interface {
 	Start()
-	Replicate(context.Context, []byte) error
+	Replicate(context.Context, []byte) ([]byte, error)
 	Stop()
 }
 

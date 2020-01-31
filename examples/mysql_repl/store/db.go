@@ -76,19 +76,19 @@ func (this *mysqlStore) save(sqlStmt string) error {
 	}
 }
 
-func (this *mysqlStore) Save(data []byte) error {
+func (this *mysqlStore) Save(data []byte) ([]byte, error) {
 	if save_req, err := FromBytes(data); err != nil {
-		return err
+		return nil, err
 	} else {
 		sql := save_req.StmtTmpl
 		if tmpl, err := template.New("sql_tmpl").Parse(sql); err != nil {
-			return err
+			return nil, err
 		} else {
 			var buf bytes.Buffer
 			if err := tmpl.Execute(&buf, save_req.Params); err != nil {
-				return err
+				return nil, err
 			} else {
-				return this.save(buf.String())
+				return nil, this.save(buf.String())
 			}
 		}
 	}

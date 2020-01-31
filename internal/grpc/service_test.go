@@ -58,12 +58,12 @@ func (this *mockRepl) Start() {
 func (this *mockRepl) Stop() {
 }
 
-func (this *mockRepl) Replicate(ctx context.Context, data []byte) error {
+func (this *mockRepl) Replicate(ctx context.Context, data []byte) ([]byte, error) {
 	if hsh, err := hashCode(data); err != nil {
-		return err
+		return nil, err
 	} else {
 		this.data[hsh] = data
-		return nil
+		return nil, nil
 	}
 }
 

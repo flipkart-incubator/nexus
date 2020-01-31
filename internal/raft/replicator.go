@@ -62,10 +62,11 @@ func (this *replicator) Start() {
 	go this.readCommits()
 }
 
-func (this *replicator) Replicate(ctx context.Context, data []byte) error {
+func (this *replicator) Replicate(ctx context.Context, data []byte) ([]byte, error) {
+	// TODO: Validate raft state to check if Start() has been invoked
 	repl_req := &internalNexusRequest{this.idGen.Next(), data}
 	if repl_req_data, err := repl_req.marshal(); err != nil {
-		return err
+		return nil, err
 	} else {
 		ch := this.waiter.Register(repl_req.ID)
 		child_ctx, cancel := context.WithTimeout(ctx, this.replTimeout)
@@ -73,18 +74,18 @@ func (this *replicator) Replicate(ctx context.Context, data []byte) error {
 		if err := this.node.node.Propose(child_ctx, repl_req_data); err != nil {
 			log.Printf("[WARN] Error occurred while proposing to Raft. Message: %v.", err)
 			this.waiter.Trigger(repl_req.ID, nil)
-			return err
+			return nil, err
 		}
 		select {
 		case res := <-ch:
 			if repl_res := res.(*internalNexusResponse); repl_res.Err != nil {
-				return repl_res.Err
+				return nil, repl_res.Err
 			} else {
-				return nil
+				return repl_res.Res, nil
 			}
 		case <-child_ctx.Done():
 			this.waiter.Trigger(repl_req.ID, nil)
-			return child_ctx.Err()
+			return nil, child_ctx.Err()
 		}
 	}
 }
@@ -132,11 +133,11 @@ func (this *replicator) readCommits() {
 				log.Panic(err)
 			}
 		} else {
-			repl_res := internalNexusResponse{}
 			if repl_req, err := unmarshal(data); err != nil {
 				log.Fatal(err)
 			} else {
-				repl_res.Err = this.store.Save(repl_req.Req)
+				repl_res := internalNexusResponse{}
+				repl_res.Res, repl_res.Err = this.store.Save(repl_req.Req)
 				this.waiter.Trigger(repl_req.ID, &repl_res)
 			}
 		}

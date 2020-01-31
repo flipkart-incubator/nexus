@@ -54,13 +54,13 @@ func (this *redisStore) Close() error {
 	return this.cli.Close()
 }
 
-func (this *redisStore) Save(data []byte) error {
+func (this *redisStore) Save(data []byte) ([]byte, error) {
 	save_req := SaveRequest{}
 	buf := bytes.NewBuffer(data)
 	if err := gob.NewDecoder(buf).Decode(&save_req); err != nil {
-		return err
+		return nil, err
 	} else {
-		return this.save(&save_req)
+		return nil, this.save(&save_req)
 	}
 }
 
