@@ -37,17 +37,14 @@ func sendMySQLCmd(nc *grpc.NexusClient, cmd string) error {
 }
 
 func sendRedisCmd(nc *grpc.NexusClient, cmd string) error {
-	if save_req, err := rstore.NewSaveRequest(cmd); err != nil {
+	save_req := &rstore.SaveRequest{Lua: cmd}
+	if bts, err := save_req.ToBytes(); err != nil {
 		return err
 	} else {
-		if bts, err := save_req.ToBytes(); err != nil {
+		if err := nc.Replicate(bts); err != nil {
 			return err
 		} else {
-			if err := nc.Replicate(bts); err != nil {
-				return err
-			} else {
-				return nil
-			}
+			return nil
 		}
 	}
 }
