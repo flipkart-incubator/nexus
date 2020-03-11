@@ -29,17 +29,17 @@ func NewInSecureNexusClient(svcAddr string) (*NexusClient, error) {
 	}
 }
 
-func (this *NexusClient) Replicate(data []byte) error {
+func (this *NexusClient) Replicate(data []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 	putReq := &api.ReplicateRequest{Data: data}
 	if res, err := this.nexusCli.Replicate(ctx, putReq); err != nil {
-		return err
+		return nil, err
 	} else {
 		if res.Code != 0 {
-			return errors.New(res.Message)
+			return nil, errors.New(res.Message)
 		} else {
-			return nil
+			return res.Data, nil
 		}
 	}
 }

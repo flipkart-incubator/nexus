@@ -5,6 +5,7 @@ option go_package = "api";
 message ReplicateResponse {
   int32 code = 1;
   string message = 2;
+  bytes data = 3;
 }
 
 message ReplicateRequest {

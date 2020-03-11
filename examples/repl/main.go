@@ -23,29 +23,21 @@ func newNexusClient(nexus_url string) *grpc.NexusClient {
 	}
 }
 
-func sendMySQLCmd(nc *grpc.NexusClient, cmd string) error {
+func sendMySQLCmd(nc *grpc.NexusClient, cmd string) ([]byte, error) {
 	save_req := &mstore.SaveRequest{StmtTmpl: cmd}
 	if bts, err := save_req.ToBytes(); err != nil {
-		return err
+		return nil, err
 	} else {
-		if err := nc.Replicate(bts); err != nil {
-			return err
-		} else {
-			return nil
-		}
+		return nc.Replicate(bts)
 	}
 }
 
-func sendRedisCmd(nc *grpc.NexusClient, cmd string) error {
+func sendRedisCmd(nc *grpc.NexusClient, cmd string) ([]byte, error) {
 	save_req := &rstore.SaveRequest{Lua: cmd}
 	if bts, err := save_req.ToBytes(); err != nil {
-		return err
+		return nil, err
 	} else {
-		if err := nc.Replicate(bts); err != nil {
-			return err
-		} else {
-			return nil
-		}
+		return nc.Replicate(bts)
 	}
 }
 
@@ -53,10 +45,10 @@ func sendMySQL(nexus_url string, cmd string) {
 	nc := newNexusClient(nexus_url)
 	defer nc.Close()
 
-	if err := sendMySQLCmd(nc, str.TrimSpace(cmd)); err != nil {
+	if res, err := sendMySQLCmd(nc, str.TrimSpace(cmd)); err != nil {
 		fmt.Println(err.Error())
 	} else {
-		fmt.Println("OK")
+		fmt.Printf("Response from MySQL (without quotes): '%s'\n", res)
 	}
 }
 
@@ -68,10 +60,10 @@ func replMySQL(nexus_url string) {
 	fmt.Print("mysql> ")
 	for in.Scan() {
 		cmd := in.Text()
-		if err := sendMySQLCmd(nc, str.TrimSpace(cmd)); err != nil {
+		if res, err := sendMySQLCmd(nc, str.TrimSpace(cmd)); err != nil {
 			fmt.Println(err.Error())
 		} else {
-			fmt.Println("OK")
+			fmt.Printf("Response from MySQL (without quotes): '%s'\n", res)
 		}
 		fmt.Print("mysql> ")
 	}
@@ -81,10 +73,10 @@ func sendRedis(nexus_url string, cmd string) {
 	nc := newNexusClient(nexus_url)
 	defer nc.Close()
 
-	if err := sendRedisCmd(nc, str.TrimSpace(cmd)); err != nil {
+	if res, err := sendRedisCmd(nc, str.TrimSpace(cmd)); err != nil {
 		fmt.Println(err.Error())
 	} else {
-		fmt.Println("OK")
+		fmt.Printf("Response from Redis (without quotes): '%s'\n", res)
 	}
 }
 
@@ -96,10 +88,10 @@ func replRedis(nexus_url string) {
 	fmt.Print("redis> ")
 	for in.Scan() {
 		cmd := in.Text()
-		if err := sendRedisCmd(nc, str.TrimSpace(cmd)); err != nil {
+		if res, err := sendRedisCmd(nc, str.TrimSpace(cmd)); err != nil {
 			fmt.Println(err.Error())
 		} else {
-			fmt.Println("OK")
+			fmt.Printf("Response from Redis (without quotes): '%s'\n", res)
 		}
 		fmt.Print("redis> ")
 	}
