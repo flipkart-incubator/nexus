@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/flipkart-incubator/nexus/pkg/raft"
 )
 
@@ -32,7 +31,7 @@ func TestReplicator(t *testing.T) {
 	defer clus.stop()
 
 	t.Run("testSaveData", testSaveData)
-	t.Run("testForNewNexusNodeJoiningCluster", testForNewNexusNodeJoiningCluster)
+	t.Run("testForNewNexusNodeJoinLeaveCluster", testForNewNexusNodeJoinLeaveCluster)
 	t.Run("testForNodeRestart", testForNodeRestart)
 }
 
@@ -54,22 +53,27 @@ func testSaveData(t *testing.T) {
 	clus.assertDB(t, reqs...)
 }
 
-func testForNewNexusNodeJoiningCluster(t *testing.T) {
+func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 	peer1 := clus.peers[0]
-	clusUrl := fmt.Sprintf("%s,%s", clusterUrl, peer4Url)
-	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: uint64(peer4Id), Context: []byte(peer4Url)}
-	peer1.repl.ProposeConfigChange(cc)
+	if err := peer1.repl.AddMember(context.Background(), peer4Id, peer4Url); err != nil {
+		t.Fatal(err)
+	}
 	sleep(3)
+	clusUrl := fmt.Sprintf("%s,%s", clusterUrl, peer4Url)
 	if peer4, err := newJoiningPeer(peer4Id, clusUrl); err != nil {
 		t.Fatal(err)
 	} else {
 		peer4.start()
 		sleep(3)
-		clus.peers = append(clus.peers, peer4)
 		db4, db1 := peer4.db.content, peer1.db.content
 		if !reflect.DeepEqual(db4, db1) {
 			t.Errorf("DB Mismatch !!! Expected: %v, Actual: %v", db4, db1)
 		}
+		if err := peer1.repl.RemoveMember(context.Background(), peer4Id); err != nil {
+			t.Fatal(err)
+		}
+		sleep(3)
+		peer4.stop()
 	}
 }
 
@@ -186,7 +190,7 @@ func newJoiningPeer(id int, clusUrl string) (*peer, error) {
 		raft.SnapDir(snapDir),
 		raft.ClusterUrl(clusUrl),
 		raft.ReplicationTimeout(replTimeout),
-		raft.Join(true),
+		raft.Join(true), // `true` since this node is joining an existing cluster
 	)
 	if err != nil {
 		return nil, err

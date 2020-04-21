@@ -160,9 +160,20 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 			case raftpb.ConfChangeRemoveNode:
 				if cc.NodeID == uint64(rc.id) {
 					log.Println("I've been removed from the cluster! Shutting down.")
+					// TODO: In this case, check if its OK to not publish to rc.commitC
 					return false
 				}
 				rc.transport.RemovePeer(types.ID(cc.NodeID))
+			}
+			if confData, err := rc.confState.Marshal(); err != nil {
+				log.Fatalf("Unable to marshal conf data. Error: %v", err)
+			} else {
+				confResData, _ := (&internalNexusRequest{ID: cc.ID, ConfReq: confData}).marshal()
+				select {
+				case rc.commitC <- confResData:
+				case <-rc.stopc:
+					return false
+				}
 			}
 		}
 
@@ -184,7 +195,7 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
 	snapshot, err := rc.snapshotter.Load()
 	if err != nil && err != snap.ErrNoSnapshot {
-		log.Fatalf("raftexample: error loading snapshot (%v)", err)
+		log.Fatalf("dkv_raft: error loading snapshot (%v)", err)
 	}
 	return snapshot
 }
@@ -193,12 +204,12 @@ func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
 func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 	if !wal.Exist(rc.waldir) {
 		if err := os.Mkdir(rc.waldir, 0750); err != nil {
-			log.Fatalf("raftexample: cannot create dir for wal (%v)", err)
+			log.Fatalf("dkv_raft: cannot create dir for wal (%v)", err)
 		}
 
 		w, err := wal.Create(rc.waldir, nil)
 		if err != nil {
-			log.Fatalf("raftexample: create wal error (%v)", err)
+			log.Fatalf("dkv_raft: create wal error (%v)", err)
 		}
 		w.Close()
 	}
@@ -210,7 +221,7 @@ func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 	log.Printf("loading WAL at term %d and index %d", walsnap.Term, walsnap.Index)
 	w, err := wal.Open(rc.waldir, walsnap)
 	if err != nil {
-		log.Fatalf("raftexample: error loading wal (%v)", err)
+		log.Fatalf("dkv_raft: error loading wal (%v)", err)
 	}
 
 	return w
@@ -223,7 +234,7 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 	w := rc.openWAL(snapshot)
 	_, st, ents, err := w.ReadAll()
 	if err != nil {
-		log.Fatalf("raftexample: failed to read WAL (%v)", err)
+		log.Fatalf("dkv_raft: failed to read WAL (%v)", err)
 	}
 	rc.raftStorage = raft.NewMemoryStorage()
 	if snapshot != nil {
@@ -253,7 +264,7 @@ func (rc *raftNode) writeError(err error) {
 func (rc *raftNode) startRaft() {
 	if !fileutil.Exist(rc.snapdir) {
 		if err := os.Mkdir(rc.snapdir, 0750); err != nil {
-			log.Fatalf("raftexample: cannot create dir for snapshot (%v)", err)
+			log.Fatalf("dkv_raft: cannot create dir for snapshot (%v)", err)
 		}
 	}
 	rc.snapshotter = snap.New(rc.snapdir)
@@ -419,19 +430,19 @@ func (rc *raftNode) serveChannels() {
 func (rc *raftNode) serveRaft() {
 	url, err := url.Parse(rc.peers[rc.id-1])
 	if err != nil {
-		log.Fatalf("raftexample: Failed parsing URL (%v)", err)
+		log.Fatalf("dkv_raft: Failed parsing URL (%v)", err)
 	}
 
 	ln, err := newStoppableListener(url.Host, rc.httpstopc)
 	if err != nil {
-		log.Fatalf("raftexample: Failed to listen rafthttp (%v)", err)
+		log.Fatalf("dkv_raft: Failed to listen rafthttp (%v)", err)
 	}
 
 	err = (&http.Server{Handler: rc.transport.Handler()}).Serve(ln)
 	select {
 	case <-rc.httpstopc:
 	default:
-		log.Fatalf("raftexample: Failed to serve rafthttp (%v)", err)
+		log.Fatalf("dkv_raft: Failed to serve rafthttp (%v)", err)
 	}
 	close(rc.httpdonec)
 }

@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"testing"
@@ -33,7 +34,7 @@ func TestNexusService(t *testing.T) {
 }
 
 func replicate(t *testing.T, nc *NexusClient, data []byte) {
-	if err := nc.Replicate(data); err != nil {
+	if _, err := nc.Replicate(data); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -65,6 +66,14 @@ func (this *mockRepl) Replicate(ctx context.Context, data []byte) ([]byte, error
 		this.data[hsh] = data
 		return nil, nil
 	}
+}
+
+func (this *mockRepl) AddMember(ctx context.Context, nodeId int, nodeUrl string) error {
+	return errors.New("mockRepl::AddMember not implemented")
+}
+
+func (this *mockRepl) RemoveMember(ctx context.Context, nodeId int) error {
+	return errors.New("mockRepl::RemoveMember not implemented")
 }
 
 func (this *mockRepl) hasData(data []byte) bool {

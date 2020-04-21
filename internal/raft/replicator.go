@@ -29,8 +29,9 @@ type replicator struct {
 }
 
 type internalNexusRequest struct {
-	ID  uint64
-	Req []byte
+	ID      uint64
+	Req     []byte
+	ConfReq []byte
 }
 
 type internalNexusResponse struct {
@@ -64,7 +65,7 @@ func (this *replicator) Start() {
 
 func (this *replicator) Replicate(ctx context.Context, data []byte) ([]byte, error) {
 	// TODO: Validate raft state to check if Start() has been invoked
-	repl_req := &internalNexusRequest{this.idGen.Next(), data}
+	repl_req := &internalNexusRequest{ID: this.idGen.Next(), Req: data}
 	if repl_req_data, err := repl_req.marshal(); err != nil {
 		return nil, err
 	} else {
@@ -72,27 +73,30 @@ func (this *replicator) Replicate(ctx context.Context, data []byte) ([]byte, err
 		child_ctx, cancel := context.WithTimeout(ctx, this.replTimeout)
 		defer cancel()
 		if err := this.node.node.Propose(child_ctx, repl_req_data); err != nil {
-			log.Printf("[WARN] Error occurred while proposing to Raft. Message: %v.", err)
-			this.waiter.Trigger(repl_req.ID, nil)
+			log.Printf("[WARN] Error while proposing to Raft. Message: %v.", err)
+			this.waiter.Trigger(repl_req.ID, &internalNexusResponse{Err: err})
 			return nil, err
 		}
 		select {
 		case res := <-ch:
-			if repl_res := res.(*internalNexusResponse); repl_res.Err != nil {
-				return nil, repl_res.Err
-			} else {
-				return repl_res.Res, nil
-			}
+			repl_res := res.(*internalNexusResponse)
+			return repl_res.Res, repl_res.Err
 		case <-child_ctx.Done():
-			this.waiter.Trigger(repl_req.ID, nil)
-			return nil, child_ctx.Err()
+			err := child_ctx.Err()
+			this.waiter.Trigger(repl_req.ID, &internalNexusResponse{Err: err})
+			return nil, err
 		}
 	}
 }
 
-func (this *replicator) ProposeConfigChange(confChange raftpb.ConfChange) {
-	confChange.ID = atomic.AddUint64(&this.confChangeCount, 1)
-	this.node.node.ProposeConfChange(context.TODO(), confChange)
+func (this *replicator) AddMember(ctx context.Context, nodeId int, nodeUrl string) error {
+	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: uint64(nodeId), Context: []byte(nodeUrl)}
+	return this.proposeConfigChange(ctx, cc)
+}
+
+func (this *replicator) RemoveMember(ctx context.Context, nodeId int) error {
+	cc := raftpb.ConfChange{Type: raftpb.ConfChangeRemoveNode, NodeID: uint64(nodeId)}
+	return this.proposeConfigChange(ctx, cc)
 }
 
 func (this *replicator) Stop() {
@@ -116,6 +120,27 @@ func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
 	return repl
 }
 
+func (this *replicator) proposeConfigChange(ctx context.Context, confChange raftpb.ConfChange) error {
+	confChange.ID = atomic.AddUint64(&this.confChangeCount, 1)
+	ch := this.waiter.Register(confChange.ID)
+	child_ctx, cancel := context.WithTimeout(ctx, this.replTimeout)
+	defer cancel()
+	if err := this.node.node.ProposeConfChange(ctx, confChange); err != nil {
+		log.Printf("[WARN] Error while proposing config change to Raft. Message: %v.", err)
+		this.waiter.Trigger(confChange.ID, &internalNexusResponse{Err: err})
+		return err
+	}
+	select {
+	case res := <-ch:
+		repl_res := res.(*internalNexusResponse)
+		return repl_res.Err
+	case <-child_ctx.Done():
+		err := child_ctx.Err()
+		this.waiter.Trigger(confChange.ID, &internalNexusResponse{Err: err})
+		return err
+	}
+}
+
 func (this *replicator) readCommits() {
 	for data := range this.commitChan {
 		if data == nil {
@@ -137,7 +162,10 @@ func (this *replicator) readCommits() {
 				log.Fatal(err)
 			} else {
 				repl_res := internalNexusResponse{}
-				repl_res.Res, repl_res.Err = this.store.Save(repl_req.Req)
+				// Forward to storage only the regular reqs and not conf change reqs
+				if repl_req.Req != nil {
+					repl_res.Res, repl_res.Err = this.store.Save(repl_req.Req)
+				}
 				this.waiter.Trigger(repl_req.ID, &repl_res)
 			}
 		}
