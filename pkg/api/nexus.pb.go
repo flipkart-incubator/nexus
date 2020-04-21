@@ -24,10 +24,56 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
-type ReplicateResponse struct {
+type Status struct {
 	Code                 int32    `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
 	Message              string   `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	Data                 []byte   `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *Status) Reset()         { *m = Status{} }
+func (m *Status) String() string { return proto.CompactTextString(m) }
+func (*Status) ProtoMessage()    {}
+func (*Status) Descriptor() ([]byte, []int) {
+	return fileDescriptor_6bc6d570457f57a9, []int{0}
+}
+
+func (m *Status) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_Status.Unmarshal(m, b)
+}
+func (m *Status) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_Status.Marshal(b, m, deterministic)
+}
+func (m *Status) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Status.Merge(m, src)
+}
+func (m *Status) XXX_Size() int {
+	return xxx_messageInfo_Status.Size(m)
+}
+func (m *Status) XXX_DiscardUnknown() {
+	xxx_messageInfo_Status.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Status proto.InternalMessageInfo
+
+func (m *Status) GetCode() int32 {
+	if m != nil {
+		return m.Code
+	}
+	return 0
+}
+
+func (m *Status) GetMessage() string {
+	if m != nil {
+		return m.Message
+	}
+	return ""
+}
+
+type ReplicateResponse struct {
+	Status               *Status  `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Data                 []byte   `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -37,7 +83,7 @@ func (m *ReplicateResponse) Reset()         { *m = ReplicateResponse{} }
 func (m *ReplicateResponse) String() string { return proto.CompactTextString(m) }
 func (*ReplicateResponse) ProtoMessage()    {}
 func (*ReplicateResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_6bc6d570457f57a9, []int{0}
+	return fileDescriptor_6bc6d570457f57a9, []int{1}
 }
 
 func (m *ReplicateResponse) XXX_Unmarshal(b []byte) error {
@@ -58,18 +104,11 @@ func (m *ReplicateResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ReplicateResponse proto.InternalMessageInfo
 
-func (m *ReplicateResponse) GetCode() int32 {
+func (m *ReplicateResponse) GetStatus() *Status {
 	if m != nil {
-		return m.Code
+		return m.Status
 	}
-	return 0
-}
-
-func (m *ReplicateResponse) GetMessage() string {
-	if m != nil {
-		return m.Message
-	}
-	return ""
+	return nil
 }
 
 func (m *ReplicateResponse) GetData() []byte {
@@ -90,7 +129,7 @@ func (m *ReplicateRequest) Reset()         { *m = ReplicateRequest{} }
 func (m *ReplicateRequest) String() string { return proto.CompactTextString(m) }
 func (*ReplicateRequest) ProtoMessage()    {}
 func (*ReplicateRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_6bc6d570457f57a9, []int{1}
+	return fileDescriptor_6bc6d570457f57a9, []int{2}
 }
 
 func (m *ReplicateRequest) XXX_Unmarshal(b []byte) error {
@@ -118,26 +157,122 @@ func (m *ReplicateRequest) GetData() []byte {
 	return nil
 }
 
+type AddNodeRequest struct {
+	NodeId               uint32   `protobuf:"varint,1,opt,name=nodeId,proto3" json:"nodeId,omitempty"`
+	NodeUrl              string   `protobuf:"bytes,2,opt,name=nodeUrl,proto3" json:"nodeUrl,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *AddNodeRequest) Reset()         { *m = AddNodeRequest{} }
+func (m *AddNodeRequest) String() string { return proto.CompactTextString(m) }
+func (*AddNodeRequest) ProtoMessage()    {}
+func (*AddNodeRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_6bc6d570457f57a9, []int{3}
+}
+
+func (m *AddNodeRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_AddNodeRequest.Unmarshal(m, b)
+}
+func (m *AddNodeRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_AddNodeRequest.Marshal(b, m, deterministic)
+}
+func (m *AddNodeRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AddNodeRequest.Merge(m, src)
+}
+func (m *AddNodeRequest) XXX_Size() int {
+	return xxx_messageInfo_AddNodeRequest.Size(m)
+}
+func (m *AddNodeRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_AddNodeRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AddNodeRequest proto.InternalMessageInfo
+
+func (m *AddNodeRequest) GetNodeId() uint32 {
+	if m != nil {
+		return m.NodeId
+	}
+	return 0
+}
+
+func (m *AddNodeRequest) GetNodeUrl() string {
+	if m != nil {
+		return m.NodeUrl
+	}
+	return ""
+}
+
+type RemoveNodeRequest struct {
+	NodeId               uint32   `protobuf:"varint,1,opt,name=nodeId,proto3" json:"nodeId,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *RemoveNodeRequest) Reset()         { *m = RemoveNodeRequest{} }
+func (m *RemoveNodeRequest) String() string { return proto.CompactTextString(m) }
+func (*RemoveNodeRequest) ProtoMessage()    {}
+func (*RemoveNodeRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_6bc6d570457f57a9, []int{4}
+}
+
+func (m *RemoveNodeRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_RemoveNodeRequest.Unmarshal(m, b)
+}
+func (m *RemoveNodeRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_RemoveNodeRequest.Marshal(b, m, deterministic)
+}
+func (m *RemoveNodeRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RemoveNodeRequest.Merge(m, src)
+}
+func (m *RemoveNodeRequest) XXX_Size() int {
+	return xxx_messageInfo_RemoveNodeRequest.Size(m)
+}
+func (m *RemoveNodeRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_RemoveNodeRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RemoveNodeRequest proto.InternalMessageInfo
+
+func (m *RemoveNodeRequest) GetNodeId() uint32 {
+	if m != nil {
+		return m.NodeId
+	}
+	return 0
+}
+
 func init() {
+	proto.RegisterType((*Status)(nil), "nexus.api.Status")
 	proto.RegisterType((*ReplicateResponse)(nil), "nexus.api.ReplicateResponse")
 	proto.RegisterType((*ReplicateRequest)(nil), "nexus.api.ReplicateRequest")
+	proto.RegisterType((*AddNodeRequest)(nil), "nexus.api.AddNodeRequest")
+	proto.RegisterType((*RemoveNodeRequest)(nil), "nexus.api.RemoveNodeRequest")
 }
 
 func init() { proto.RegisterFile("nexus.proto", fileDescriptor_6bc6d570457f57a9) }
 
 var fileDescriptor_6bc6d570457f57a9 = []byte{
-	// 173 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0xce, 0x4b, 0xad, 0x28,
-	0x2d, 0xd6, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0xe2, 0x84, 0x70, 0x12, 0x0b, 0x32, 0x95, 0x42,
-	0xb9, 0x04, 0x83, 0x52, 0x0b, 0x72, 0x32, 0x93, 0x13, 0x4b, 0x52, 0x83, 0x52, 0x8b, 0x0b, 0xf2,
-	0xf3, 0x8a, 0x53, 0x85, 0x84, 0xb8, 0x58, 0x92, 0xf3, 0x53, 0x52, 0x25, 0x18, 0x15, 0x18, 0x35,
-	0x58, 0x83, 0xc0, 0x6c, 0x21, 0x09, 0x2e, 0xf6, 0xdc, 0xd4, 0xe2, 0xe2, 0xc4, 0xf4, 0x54, 0x09,
-	0x26, 0x05, 0x46, 0x0d, 0xce, 0x20, 0x18, 0x17, 0xa4, 0x3a, 0x25, 0xb1, 0x24, 0x51, 0x82, 0x59,
-	0x81, 0x51, 0x83, 0x27, 0x08, 0xcc, 0x56, 0x52, 0xe3, 0x12, 0x40, 0x32, 0xb6, 0xb0, 0x34, 0xb5,
-	0xb8, 0x04, 0xae, 0x8e, 0x11, 0xa1, 0xce, 0xc8, 0x9f, 0x8b, 0xd5, 0x0f, 0xe4, 0x16, 0x21, 0x37,
-	0x2e, 0x4e, 0xb8, 0x06, 0x21, 0x69, 0x3d, 0xb8, 0x03, 0xf5, 0xd0, 0x8d, 0x91, 0x92, 0xc1, 0x2e,
-	0x09, 0x71, 0xba, 0x13, 0x6b, 0x14, 0x73, 0x62, 0x41, 0x66, 0x12, 0x1b, 0xd8, 0xa3, 0xc6, 0x80,
-	0x00, 0x00, 0x00, 0xff, 0xff, 0x58, 0x83, 0x09, 0xb2, 0xf7, 0x00, 0x00, 0x00,
+	// 275 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x52, 0x3d, 0x4f, 0xc3, 0x30,
+	0x10, 0x95, 0x81, 0xa4, 0xca, 0x15, 0x10, 0xbd, 0x01, 0x85, 0xc2, 0x50, 0x65, 0x40, 0x45, 0x48,
+	0x19, 0x8a, 0x04, 0x13, 0x03, 0x1d, 0x90, 0x58, 0x3a, 0x18, 0xb1, 0xb0, 0x99, 0xfa, 0x84, 0x22,
+	0xb5, 0xb1, 0xa9, 0x1d, 0xc4, 0x3f, 0xe4, 0x6f, 0x21, 0xbb, 0x6e, 0x70, 0x4b, 0x06, 0xb6, 0xf7,
+	0x94, 0x97, 0xf7, 0x71, 0x32, 0xf4, 0x6b, 0xfa, 0x6a, 0x4c, 0xa9, 0x57, 0xca, 0x2a, 0xcc, 0xd6,
+	0x44, 0xe8, 0xaa, 0xb8, 0x85, 0xf4, 0xd9, 0x0a, 0xdb, 0x18, 0x44, 0x38, 0x98, 0x2b, 0x49, 0x39,
+	0x1b, 0xb1, 0x71, 0xc2, 0x3d, 0xc6, 0x1c, 0x7a, 0x4b, 0x32, 0x46, 0xbc, 0x53, 0xbe, 0x37, 0x62,
+	0xe3, 0x8c, 0x6f, 0x68, 0xc1, 0x61, 0xc0, 0x49, 0x2f, 0xaa, 0xb9, 0xb0, 0xc4, 0xc9, 0x68, 0x55,
+	0x1b, 0xc2, 0x2b, 0x48, 0x8d, 0x37, 0xf3, 0x26, 0xfd, 0xc9, 0xa0, 0x6c, 0x83, 0xca, 0x75, 0x0a,
+	0x0f, 0x02, 0x97, 0x26, 0x85, 0x15, 0xde, 0xf6, 0x90, 0x7b, 0x5c, 0x5c, 0xc2, 0x49, 0xe4, 0xf9,
+	0xd1, 0x90, 0xb1, 0xad, 0x8e, 0x45, 0xba, 0x29, 0x1c, 0x3f, 0x48, 0x39, 0x53, 0xb2, 0x55, 0x9d,
+	0x42, 0x5a, 0x2b, 0x49, 0x4f, 0xd2, 0xeb, 0x8e, 0x78, 0x60, 0xae, 0xbf, 0x43, 0x2f, 0xab, 0xc5,
+	0xa6, 0x7f, 0xa0, 0xc5, 0xb5, 0xeb, 0xbf, 0x54, 0x9f, 0xf4, 0x0f, 0x9b, 0xc9, 0x37, 0x83, 0x64,
+	0xe6, 0x96, 0xe0, 0x23, 0x64, 0x6d, 0x45, 0x3c, 0x8f, 0xe6, 0xed, 0x16, 0x1f, 0x5e, 0x74, 0x7f,
+	0x0c, 0x97, 0xba, 0x83, 0x5e, 0x98, 0x80, 0x67, 0x91, 0x70, 0x7b, 0xd6, 0xf0, 0xef, 0xfd, 0xf0,
+	0x1e, 0xe0, 0xb7, 0x37, 0x6e, 0x87, 0xec, 0xcc, 0xe9, 0xf8, 0x7d, 0x9a, 0xbc, 0xee, 0x0b, 0x5d,
+	0xbd, 0xa5, 0xfe, 0x1d, 0xdc, 0xfc, 0x04, 0x00, 0x00, 0xff, 0xff, 0xa5, 0xa1, 0x12, 0x51, 0x16,
+	0x02, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -153,6 +288,8 @@ const _ = grpc.SupportPackageIsVersion4
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type NexusClient interface {
 	Replicate(ctx context.Context, in *ReplicateRequest, opts ...grpc.CallOption) (*ReplicateResponse, error)
+	AddNode(ctx context.Context, in *AddNodeRequest, opts ...grpc.CallOption) (*Status, error)
+	RemoveNode(ctx context.Context, in *RemoveNodeRequest, opts ...grpc.CallOption) (*Status, error)
 }
 
 type nexusClient struct {
@@ -172,9 +309,29 @@ func (c *nexusClient) Replicate(ctx context.Context, in *ReplicateRequest, opts 
 	return out, nil
 }
 
+func (c *nexusClient) AddNode(ctx context.Context, in *AddNodeRequest, opts ...grpc.CallOption) (*Status, error) {
+	out := new(Status)
+	err := c.cc.Invoke(ctx, "/nexus.api.Nexus/AddNode", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nexusClient) RemoveNode(ctx context.Context, in *RemoveNodeRequest, opts ...grpc.CallOption) (*Status, error) {
+	out := new(Status)
+	err := c.cc.Invoke(ctx, "/nexus.api.Nexus/RemoveNode", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NexusServer is the server API for Nexus service.
 type NexusServer interface {
 	Replicate(context.Context, *ReplicateRequest) (*ReplicateResponse, error)
+	AddNode(context.Context, *AddNodeRequest) (*Status, error)
+	RemoveNode(context.Context, *RemoveNodeRequest) (*Status, error)
 }
 
 // UnimplementedNexusServer can be embedded to have forward compatible implementations.
@@ -183,6 +340,12 @@ type UnimplementedNexusServer struct {
 
 func (*UnimplementedNexusServer) Replicate(ctx context.Context, req *ReplicateRequest) (*ReplicateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Replicate not implemented")
+}
+func (*UnimplementedNexusServer) AddNode(ctx context.Context, req *AddNodeRequest) (*Status, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddNode not implemented")
+}
+func (*UnimplementedNexusServer) RemoveNode(ctx context.Context, req *RemoveNodeRequest) (*Status, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveNode not implemented")
 }
 
 func RegisterNexusServer(s *grpc.Server, srv NexusServer) {
@@ -207,6 +370,42 @@ func _Nexus_Replicate_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Nexus_AddNode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddNodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NexusServer).AddNode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/nexus.api.Nexus/AddNode",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NexusServer).AddNode(ctx, req.(*AddNodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Nexus_RemoveNode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveNodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NexusServer).RemoveNode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/nexus.api.Nexus/RemoveNode",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NexusServer).RemoveNode(ctx, req.(*RemoveNodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Nexus_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "nexus.api.Nexus",
 	HandlerType: (*NexusServer)(nil),
@@ -214,6 +413,14 @@ var _Nexus_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Replicate",
 			Handler:    _Nexus_Replicate_Handler,
+		},
+		{
+			MethodName: "AddNode",
+			Handler:    _Nexus_AddNode_Handler,
+		},
+		{
+			MethodName: "RemoveNode",
+			Handler:    _Nexus_RemoveNode_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -46,8 +46,22 @@ func (this *NexusService) Close() error {
 
 func (this *NexusService) Replicate(ctx context.Context, req *api.ReplicateRequest) (*api.ReplicateResponse, error) {
 	if res, err := this.repl.Replicate(ctx, req.Data); err != nil {
-		return &api.ReplicateResponse{Code: -1, Message: err.Error()}, err
+		return &api.ReplicateResponse{Status: &api.Status{Code: -1, Message: err.Error()}, Data: nil}, err
 	} else {
-		return &api.ReplicateResponse{Data: res}, nil
+		return &api.ReplicateResponse{Status: &api.Status{}, Data: res}, nil
 	}
+}
+
+func (this *NexusService) AddNode(ctx context.Context, req *api.AddNodeRequest) (*api.Status, error) {
+	if err := this.repl.AddMember(ctx, int(req.NodeId), req.NodeUrl); err != nil {
+		return &api.Status{Code: -1, Message: err.Error()}, err
+	}
+	return &api.Status{}, nil
+}
+
+func (this *NexusService) RemoveNode(ctx context.Context, req *api.RemoveNodeRequest) (*api.Status, error) {
+	if err := this.repl.RemoveMember(ctx, int(req.NodeId)); err != nil {
+		return &api.Status{Code: -1, Message: err.Error()}, err
+	}
+	return &api.Status{}, nil
 }

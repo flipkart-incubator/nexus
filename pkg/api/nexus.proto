@@ -2,16 +2,31 @@ syntax = "proto3";
 package nexus.api;
 option go_package = "api";
 
-message ReplicateResponse {
+message Status {
   int32 code = 1;
   string message = 2;
-  bytes data = 3;
+}
+
+message ReplicateResponse {
+  Status status = 1;
+  bytes data = 2;
 }
 
 message ReplicateRequest {
   bytes data = 1;
 }
 
+message AddNodeRequest {
+  uint32 nodeId = 1;
+  string nodeUrl = 2;
+}
+
+message RemoveNodeRequest {
+  uint32 nodeId = 1;
+}
+
 service Nexus {
   rpc Replicate (ReplicateRequest) returns (ReplicateResponse);
+  rpc AddNode (AddNodeRequest) returns (Status);
+  rpc RemoveNode (RemoveNodeRequest) returns (Status);
 }

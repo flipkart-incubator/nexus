@@ -36,12 +36,36 @@ func (this *NexusClient) Replicate(data []byte) ([]byte, error) {
 	if res, err := this.nexusCli.Replicate(ctx, putReq); err != nil {
 		return nil, err
 	} else {
-		if res.Code != 0 {
-			return nil, errors.New(res.Message)
+		if res.Status.Code != 0 {
+			return nil, errors.New(res.Status.Message)
 		} else {
 			return res.Data, nil
 		}
 	}
+}
+
+func (this *NexusClient) AddNode(nodeId uint32, nodeUrl string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	defer cancel()
+	req := &api.AddNodeRequest{NodeId: nodeId, NodeUrl: nodeUrl}
+	if res, err := this.nexusCli.AddNode(ctx, req); err != nil {
+		return err
+	} else if res.Code != 0 {
+		return errors.New(res.Message)
+	}
+	return nil
+}
+
+func (this *NexusClient) RemoveNode(nodeId uint32) error {
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	defer cancel()
+	req := &api.RemoveNodeRequest{NodeId: nodeId}
+	if res, err := this.nexusCli.RemoveNode(ctx, req); err != nil {
+		return err
+	} else if res.Code != 0 {
+		return errors.New(res.Message)
+	}
+	return nil
 }
 
 func (this *NexusClient) Close() error {
