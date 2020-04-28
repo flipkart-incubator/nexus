@@ -111,18 +111,28 @@ func (this *redisStore) Restore(data []byte) error {
 	return this.loadAllData(redis_data)
 }
 
-func connect(redis_host string, redis_port uint) (*redis.Client, error) {
-	client := redis.NewClient(&redis.Options{
-		Addr:               fmt.Sprintf("%s:%d", redis_host, redis_port),
-		Password:           "",
-		IdleCheckFrequency: -1, // This value causes the Redis idle connection reaper go-routine to be disabled, since its impl. has a flaw that allows it to linger even after the connection is closed
-	})
+func connect(redis_sentinel string, redis_master string, redis_host string, redis_port uint, redis_password string) (*redis.Client, error) {
+	client := getClient(redis_sentinel, redis_master, redis_host, redis_port, redis_password)
 	_, err := client.Ping().Result()
 	return client, err
 }
 
-func NewRedisDB(host string, port uint) (*redisStore, error) {
-	if cli, err := connect(host, port); err != nil {
+func getClient(redis_sentinel string, redis_master string, redis_host string, redis_port uint, redis_password string) *redis.Client {
+	if strings.TrimSpace(redis_sentinel) != "" && strings.TrimSpace(redis_master) != "" {
+		return redis.NewFailoverClient(&redis.FailoverOptions{
+			MasterName:    redis_master,
+			SentinelAddrs: strings.Split(redis_sentinel, ","),
+		})
+	}
+	return redis.NewClient(&redis.Options{
+		Addr:               fmt.Sprintf("%s:%d", redis_host, redis_port),
+		Password:           redis_password,
+		IdleCheckFrequency: -1, // This value causes the Redis idle connection reaper go-routine to be disabled, since its impl. has a flaw that allows it to linger even after the connection is closed
+	})
+}
+
+func NewRedisDB(sentinel string, master string, host string, port uint, password string) (*redisStore, error) {
+	if cli, err := connect(sentinel, master, host, port, password); err != nil {
 		return nil, err
 	} else {
 		return &redisStore{cli}, nil

@@ -22,21 +22,27 @@ func setupSignalNotify() <-chan os.Signal {
 
 var (
 	stopChan  <-chan os.Signal
+	redisSentinel string
+	redisMaster string
 	redisHost string
 	redisPort uint
+	redisPassword string
 	nexusPort uint
 )
 
 func init() {
 	flag.UintVar(&nexusPort, "nexusPort", 0, "Port on which Nexus GRPC server listens")
+	flag.StringVar(&redisSentinel, "redisSentinel", "0.0.0.1:26379,0.0.0.2:26379,0.0.0.3:26379", "Redis Sentinel")
+	flag.StringVar(&redisMaster, "redisMaster", "master", "Redis master")
 	flag.StringVar(&redisHost, "redisHost", "127.0.0.1", "Redis host")
 	flag.UintVar(&redisPort, "redisPort", 6379, "Redis port")
+	flag.StringVar(&redisPassword, "redisPassword", "", "Redis password")
 	stopChan = setupSignalNotify()
 }
 
 func main() {
 	flag.Parse()
-	if db, err := store.NewRedisDB(redisHost, redisPort); err != nil {
+	if db, err := store.NewRedisDB(redisSentinel, redisMaster, redisHost, redisPort, redisPassword); err != nil {
 		panic(err)
 	} else {
 		repl, _ := api.NewRaftReplicator(db, raft.OptionsFromFlags()...)
