@@ -34,6 +34,8 @@ func init() {
 	flag.StringVar(&redisSentinel, "redisSentinel", "0.0.0.1:26379,0.0.0.2:26379,0.0.0.3:26379", "Redis Sentinel")
 	flag.StringVar(&redisMaster, "redisMaster", "master", "Redis master")
 	flag.UintVar(&grpcPort, "grpcPort", 0, "Port on which Nexus GRPC server listens")
+	flag.StringVar(&redisSentinel, "redisSentinel", "0.0.0.1:26379,0.0.0.2:26379,0.0.0.3:26379", "Redis Sentinel")
+	flag.StringVar(&redisMaster, "redisMaster", "master", "Redis master")
 	flag.StringVar(&redisHost, "redisHost", "127.0.0.1", "Redis host")
 	flag.UintVar(&redisPort, "redisPort", 6379, "Redis port")
 	flag.StringVar(&redisPassword, "redisPassword", "", "Redis password")
