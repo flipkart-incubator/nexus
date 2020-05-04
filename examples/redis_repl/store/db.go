@@ -13,18 +13,6 @@ type redisStore struct {
 	cli *redis.Client
 }
 
-type SaveRequest struct {
-	Lua string
-}
-
-func (this *SaveRequest) ToBytes() ([]byte, error) {
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(this); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
 func (this *redisStore) Close() error {
 	return this.cli.Close()
 }
@@ -34,23 +22,15 @@ func isRedisError(err error) bool {
 }
 
 func (this *redisStore) Save(data []byte) ([]byte, error) {
-	save_req := SaveRequest{}
-	if err := gob.NewDecoder(bytes.NewBuffer(data)).Decode(&save_req); err != nil {
+	luaScript := string(data)
+	if res, err := this.cli.Eval(luaScript, nil).Result(); isRedisError(err) {
 		return nil, err
 	} else {
-		if res, err := this.cli.Eval(save_req.Lua, nil).Result(); isRedisError(err) {
-			return nil, err
+		if res == nil {
+			return nil, nil
 		} else {
-			if res == nil {
-				return nil, nil
-			} else {
-				var buf bytes.Buffer
-				if err := gob.NewEncoder(&buf).Encode(res); err != nil {
-					return nil, err
-				} else {
-					return buf.Bytes(), nil
-				}
-			}
+			resStr := fmt.Sprintf("%v", res)
+			return []byte(resStr), nil
 		}
 	}
 }
