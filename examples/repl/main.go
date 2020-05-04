@@ -7,7 +7,6 @@ import (
 	str "strings"
 
 	mstore "github.com/flipkart-incubator/nexus/examples/mysql_repl/store"
-	rstore "github.com/flipkart-incubator/nexus/examples/redis_repl/store"
 	"github.com/flipkart-incubator/nexus/internal/grpc"
 )
 
@@ -33,12 +32,7 @@ func sendMySQLCmd(nc *grpc.NexusClient, cmd string) ([]byte, error) {
 }
 
 func sendRedisCmd(nc *grpc.NexusClient, cmd string) ([]byte, error) {
-	save_req := &rstore.SaveRequest{Lua: cmd}
-	if bts, err := save_req.ToBytes(); err != nil {
-		return nil, err
-	} else {
-		return nc.Replicate(bts)
-	}
+	return nc.Replicate([]byte(cmd))
 }
 
 func sendMySQL(nexus_url string, cmd string) {
