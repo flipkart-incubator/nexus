@@ -45,7 +45,7 @@ func (this *NexusService) Close() error {
 }
 
 func (this *NexusService) Replicate(ctx context.Context, req *api.ReplicateRequest) (*api.ReplicateResponse, error) {
-	if res, err := this.repl.Replicate(ctx, req.Data); err != nil {
+	if res, err := this.repl.Save(ctx, req.Data); err != nil {
 		return &api.ReplicateResponse{Status: &api.Status{Code: -1, Message: err.Error()}, Data: nil}, err
 	} else {
 		return &api.ReplicateResponse{Status: &api.Status{}, Data: res}, nil

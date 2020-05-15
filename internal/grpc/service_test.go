@@ -59,7 +59,7 @@ func (this *mockRepl) Start() {
 func (this *mockRepl) Stop() {
 }
 
-func (this *mockRepl) Replicate(ctx context.Context, data []byte) ([]byte, error) {
+func (this *mockRepl) Save(ctx context.Context, data []byte) ([]byte, error) {
 	if hsh, err := hashCode(data); err != nil {
 		return nil, err
 	} else {

@@ -63,7 +63,7 @@ func (this *replicator) Start() {
 	go this.readCommits()
 }
 
-func (this *replicator) Replicate(ctx context.Context, data []byte) ([]byte, error) {
+func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 	// TODO: Validate raft state to check if Start() has been invoked
 	repl_req := &internalNexusRequest{ID: this.idGen.Next(), Req: data}
 	if repl_req_data, err := repl_req.marshal(); err != nil {
