@@ -39,15 +39,15 @@ func testSaveData(t *testing.T) {
 	var reqs []*kvReq
 	for _, peer := range clus.peers {
 		req1 := &kvReq{fmt.Sprintf("Key:%d#%d", peer.id, 1), time.Now().Unix()}
-		peer.replicate(t, req1)
+		peer.save(t, req1)
 		reqs = append(reqs, req1)
 
 		req2 := &kvReq{fmt.Sprintf("Key:%d#%d", peer.id, 2), time.Now().Unix()}
-		peer.replicate(t, req2)
+		peer.save(t, req2)
 		reqs = append(reqs, req2)
 
 		req3 := &kvReq{fmt.Sprintf("Key:%d#%d", peer.id, 3), time.Now().Unix()}
-		peer.replicate(t, req3)
+		peer.save(t, req3)
 		reqs = append(reqs, req3)
 	}
 	clus.assertDB(t, reqs...)
@@ -80,8 +80,8 @@ func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 func testForNodeRestart(t *testing.T) {
 	peer2 := clus.peers[1]
 	reqs := []*kvReq{&kvReq{"hello", "world"}, &kvReq{"foo", "bar"}}
-	peer2.replicate(t, reqs[0])
-	peer2.replicate(t, reqs[1])
+	peer2.save(t, reqs[0])
+	peer2.save(t, reqs[1])
 	clus.assertDB(t, reqs...)
 
 	peer2.stop()
@@ -89,8 +89,8 @@ func testForNodeRestart(t *testing.T) {
 
 	peer1 := clus.peers[0]
 	new_reqs := []*kvReq{&kvReq{"micro", "soft"}, &kvReq{"wel", "come"}}
-	peer1.replicate(t, new_reqs[0])
-	peer1.replicate(t, new_reqs[1])
+	peer1.save(t, new_reqs[0])
+	peer1.save(t, new_reqs[1])
 
 	var err error
 	peer2, err = newPeerWithDB(2, peer2.db)
@@ -209,11 +209,11 @@ func (this *peer) stop() {
 	this.repl.Stop()
 }
 
-func (this *peer) replicate(t *testing.T, req *kvReq) {
+func (this *peer) save(t *testing.T, req *kvReq) {
 	if bts, err := req.toBytes(); err != nil {
 		t.Fatal(err)
 	} else {
-		if _, err := this.repl.Replicate(context.Background(), bts); err != nil {
+		if _, err := this.repl.Save(context.Background(), bts); err != nil {
 			t.Fatal(err)
 		} else {
 			sleep(1)
