@@ -3,13 +3,16 @@ package raft
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/gob"
+	"errors"
 	"log"
 	"sync/atomic"
 	"time"
 
 	"github.com/coreos/etcd/pkg/idutil"
 	"github.com/coreos/etcd/pkg/wait"
+	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
@@ -20,6 +23,7 @@ type replicator struct {
 	node                 *raftNode
 	store                db.Store
 	confChangeCount      uint64
+	readChan             <-chan raft.ReadState
 	commitChan           <-chan []byte
 	errorChan            <-chan error
 	snapshotterReadyChan <-chan struct{}
@@ -61,6 +65,7 @@ func (this *replicator) Start() {
 	go this.node.startRaft()
 	<-this.snapshotterReadyChan
 	go this.readCommits()
+	go this.readReadStates()
 }
 
 func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
@@ -89,6 +94,36 @@ func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 	}
 }
 
+func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
+	// TODO: Validate raft state to check if Start() has been invoked
+	readReqId := this.idGen.Next()
+	ch := this.waiter.Register(readReqId)
+	child_ctx, cancel := context.WithTimeout(ctx, this.replTimeout)
+	defer cancel()
+	idData := make([]byte, 8)
+	binary.BigEndian.PutUint64(idData, readReqId)
+	if err := this.node.node.ReadIndex(child_ctx, idData); err != nil {
+		log.Printf("[WARN] Error while reading index in Raft. Message: %v.", err)
+		this.waiter.Trigger(readReqId, &internalNexusResponse{Err: err})
+		return nil, err
+	}
+	select {
+	case indexData := <-ch:
+		index := binary.BigEndian.Uint64(indexData.([]byte))
+		if ai := this.node.appliedIndex; ai >= index { //FIXME
+			return this.store.Load(data)
+		} else {
+			// TODO: Implement this case by waiting for apply
+			log.Printf("[WARN} Unable to read. Haven't applied this index yet. ReadIndex: %d, AppliedIndex: %d", index, ai)
+			return nil, errors.New("Not yet applied the read index")
+		}
+	case <-child_ctx.Done():
+		err := child_ctx.Err()
+		this.waiter.Trigger(readReqId, &internalNexusResponse{Err: err})
+		return nil, err
+	}
+}
+
 func (this *replicator) AddMember(ctx context.Context, nodeId int, nodeUrl string) error {
 	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: uint64(nodeId), Context: []byte(nodeUrl)}
 	return this.proposeConfigChange(ctx, cc)
@@ -105,11 +140,12 @@ func (this *replicator) Stop() {
 }
 
 func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
-	raftNode, commitC, errorC, snapshotterReadyC := NewRaftNode(options, store.Backup)
+	raftNode, readC, commitC, errorC, snapshotterReadyC := NewRaftNode(options, store.Backup)
 	repl := &replicator{
 		node:                 raftNode,
 		store:                store,
 		confChangeCount:      uint64(0),
+		readChan:             readC,
 		commitChan:           commitC,
 		errorChan:            errorC,
 		snapshotterReadyChan: snapshotterReadyC,
@@ -172,5 +208,14 @@ func (this *replicator) readCommits() {
 	}
 	if err, present := <-this.errorChan; present {
 		log.Fatal(err)
+	}
+}
+
+func (this *replicator) readReadStates() {
+	for rd := range this.readChan {
+		id := binary.BigEndian.Uint64(rd.RequestCtx)
+		indexData := make([]byte, 8)
+		binary.BigEndian.PutUint64(indexData, rd.Index)
+		this.waiter.Trigger(id, indexData)
 	}
 }

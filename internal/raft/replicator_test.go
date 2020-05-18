@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,27 +31,57 @@ func TestReplicator(t *testing.T) {
 	clus = startCluster(t)
 	defer clus.stop()
 
-	t.Run("testSaveData", testSaveData)
+	t.Run("testSaveLoadData", testSaveLoadData)
+	t.Run("testLoadTimingIssues", testLoadTimingIssues)
 	t.Run("testForNewNexusNodeJoinLeaveCluster", testForNewNexusNodeJoinLeaveCluster)
 	t.Run("testForNodeRestart", testForNodeRestart)
 }
 
-func testSaveData(t *testing.T) {
+func testSaveLoadData(t *testing.T) {
 	var reqs []*kvReq
+	// Saving
 	for _, peer := range clus.peers {
-		req1 := &kvReq{fmt.Sprintf("Key:%d#%d", peer.id, 1), time.Now().Unix()}
+		req1 := &kvReq{fmt.Sprintf("Key:%d#%d", peer.id, 1), fmt.Sprintf("Val:%d#%d", peer.id, 1)}
 		peer.save(t, req1)
 		reqs = append(reqs, req1)
 
-		req2 := &kvReq{fmt.Sprintf("Key:%d#%d", peer.id, 2), time.Now().Unix()}
+		req2 := &kvReq{fmt.Sprintf("Key:%d#%d", peer.id, 2), fmt.Sprintf("Val:%d#%d", peer.id, 2)}
 		peer.save(t, req2)
 		reqs = append(reqs, req2)
 
-		req3 := &kvReq{fmt.Sprintf("Key:%d#%d", peer.id, 3), time.Now().Unix()}
+		req3 := &kvReq{fmt.Sprintf("Key:%d#%d", peer.id, 3), fmt.Sprintf("Val:%d#%d", peer.id, 3)}
 		peer.save(t, req3)
 		reqs = append(reqs, req3)
 	}
+
+	//assertions
 	clus.assertDB(t, reqs...)
+
+	// Loading
+	for _, req := range reqs {
+		expVal := req.Val.(string)
+		for _, peer := range clus.peers {
+			actVal := peer.load(t, req).(string)
+			if expVal != actVal {
+				t.Errorf("Value mismatch for peer: %d. Key: %s, Expected Value: %s, Actual Value: %s", peer.id, req.Key, expVal, actVal)
+			}
+		}
+	}
+}
+
+func testLoadTimingIssues(t *testing.T) {
+	peer1, peer2, peer3 := clus.peers[0], clus.peers[1], clus.peers[2]
+	peer3.savePause(10 * time.Second)
+	defer peer3.savePause(0)
+
+	req := &kvReq{fmt.Sprintf("LoadKey:%d", peer1.id), fmt.Sprintf("LoadVal:%d", peer1.id)}
+	peer1.save(t, req)
+
+	peer1.assertDB(t, req)
+	peer2.assertDB(t, req)
+	//peer3.assertDB(t, req)
+
+	peer3.expectLoadFailure(t, req)
 }
 
 func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
@@ -209,6 +240,14 @@ func (this *peer) stop() {
 	this.repl.Stop()
 }
 
+func (this *peer) loadPause(pauseTime time.Duration) {
+	this.db.pauseInLoadTime = pauseTime
+}
+
+func (this *peer) savePause(pauseTime time.Duration) {
+	this.db.pauseInSaveTime = pauseTime
+}
+
 func (this *peer) save(t *testing.T, req *kvReq) {
 	if bts, err := req.toBytes(); err != nil {
 		t.Fatal(err)
@@ -219,6 +258,36 @@ func (this *peer) save(t *testing.T, req *kvReq) {
 			sleep(1)
 		}
 	}
+}
+
+func (this *peer) expectLoadFailure(t *testing.T, req *kvReq) interface{} {
+	if bts, err := req.toBytes(); err != nil {
+		t.Fatal(err)
+	} else {
+		if _, err := this.repl.Load(context.Background(), bts); err != nil {
+			t.Log(err)
+		} else {
+			t.Errorf("Expected failure but got no error")
+		}
+	}
+	return nil
+}
+
+func (this *peer) load(t *testing.T, req *kvReq) interface{} {
+	if bts, err := req.toBytes(); err != nil {
+		t.Fatal(err)
+	} else {
+		if kvBts, err := this.repl.Load(context.Background(), bts); err != nil {
+			t.Fatal(err)
+		} else {
+			if kv, err := fromBytes(kvBts); err != nil {
+				t.Fatal(err)
+			} else {
+				return kv.Val
+			}
+		}
+	}
+	return nil
 }
 
 func (this *peer) assertDB(t *testing.T, reqs ...*kvReq) {
@@ -255,7 +324,11 @@ func (this *kvReq) toBytes() ([]byte, error) {
 }
 
 type inMemKVStore struct {
+	mu      sync.Mutex
 	content map[string]interface{}
+
+	// used for pausing the peer for simulating timing effects
+	pauseInSaveTime, pauseInLoadTime time.Duration
 }
 
 func newInMemKVStore() *inMemKVStore {
@@ -266,7 +339,26 @@ func (this *inMemKVStore) Close() error {
 	return nil
 }
 
+func (this *inMemKVStore) Load(data []byte) ([]byte, error) {
+	<-time.After(this.pauseInLoadTime)
+	this.mu.Lock()
+	defer this.mu.Unlock()
+	if kvReq, err := fromBytes(data); err != nil {
+		return nil, err
+	} else {
+		if val, present := this.content[kvReq.Key]; present {
+			kvReq.Val = val
+			return kvReq.toBytes()
+		} else {
+			return nil, errors.New("not found")
+		}
+	}
+}
+
 func (this *inMemKVStore) Save(data []byte) ([]byte, error) {
+	<-time.After(this.pauseInSaveTime)
+	this.mu.Lock()
+	defer this.mu.Unlock()
 	if kvReq, err := fromBytes(data); err != nil {
 		return nil, err
 	} else {
@@ -281,6 +373,8 @@ func (this *inMemKVStore) Save(data []byte) ([]byte, error) {
 }
 
 func (this *inMemKVStore) Backup() ([]byte, error) {
+	this.mu.Lock()
+	defer this.mu.Unlock()
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(this.content); err != nil {
 		return nil, err
@@ -289,6 +383,8 @@ func (this *inMemKVStore) Backup() ([]byte, error) {
 }
 
 func (this *inMemKVStore) Restore(data []byte) error {
+	this.mu.Lock()
+	defer this.mu.Unlock()
 	content := make(map[string]interface{})
 	buf := bytes.NewBuffer(data)
 	if err := gob.NewDecoder(buf).Decode(&content); err != nil {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/gob"
+	"errors"
 	"log"
 	"text/template"
 	"time"
@@ -74,6 +75,10 @@ func (this *mysqlStore) save(sqlStmt string) error {
 			return tx.Commit()
 		}
 	}
+}
+
+func (this *mysqlStore) Load(data []byte) ([]byte, error) {
+	return nil, errors.New("Not implemented yet")
 }
 
 func (this *mysqlStore) Save(data []byte) ([]byte, error) {
