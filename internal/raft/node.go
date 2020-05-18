@@ -41,7 +41,7 @@ import (
 // A key-value stream backed by raft
 type raftNode struct {
 	readStateC chan raft.ReadState // to send out readState
-	commitC    chan []byte         // entries committed to log (k,v)
+	commitC    chan *raftpb.Entry  // entries committed to log (k,v)
 	errorC     chan error          // errors from raft session
 
 	id          int      // client ID for raft session
@@ -81,7 +81,7 @@ var defaultSnapshotCount uint64 = 0
 func NewRaftNode(opts pkg_raft.Options, getSnapshot func() ([]byte, error)) *raftNode {
 
 	readStateC := make(chan raft.ReadState)
-	commitC := make(chan []byte)
+	commitC := make(chan *raftpb.Entry)
 	errorC := make(chan error)
 
 	rc := &raftNode{
@@ -140,17 +140,7 @@ func (rc *raftNode) entriesToApply(ents []raftpb.Entry) (nents []raftpb.Entry) {
 func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 	for i := range ents {
 		switch ents[i].Type {
-		case raftpb.EntryNormal:
-			if len(ents[i].Data) == 0 {
-				// ignore empty messages
-				break
-			}
-			select {
-			case rc.commitC <- ents[i].Data:
-			case <-rc.stopc:
-				return false
-			}
-
+		case raftpb.EntryNormal: // nothing to do but leaving for clarity
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
 			cc.Unmarshal(ents[i].Data)
@@ -168,20 +158,13 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 				}
 				rc.transport.RemovePeer(types.ID(cc.NodeID))
 			}
-			if confData, err := rc.confState.Marshal(); err != nil {
-				log.Fatalf("Unable to marshal conf data. Error: %v", err)
-			} else {
-				confResData, _ := (&internalNexusRequest{ID: cc.ID, ConfReq: confData}).marshal()
-				select {
-				case rc.commitC <- confResData:
-				case <-rc.stopc:
-					return false
-				}
-			}
 		}
 
-		// after commit, update appliedIndex
-		rc.appliedIndex = ents[i].Index
+		select {
+		case rc.commitC <- &ents[i]:
+		case <-rc.stopc:
+			return false
+		}
 
 		// special nil commit to signal replay has finished
 		if ents[i].Index == rc.lastIndex {

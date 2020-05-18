@@ -46,14 +46,9 @@ func (this *internalNexusRequest) marshal() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func unmarshal(data []byte) (*internalNexusRequest, error) {
-	save_req := internalNexusRequest{}
+func (this *internalNexusRequest) unmarshal(data []byte) error {
 	buf := bytes.NewBuffer(data)
-	if err := gob.NewDecoder(buf).Decode(&save_req); err != nil {
-		return nil, err
-	} else {
-		return &save_req, nil
-	}
+	return gob.NewDecoder(buf).Decode(this)
 }
 
 func (this *replicator) Start() {
@@ -105,7 +100,7 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 	select {
 	case indexData := <-ch:
 		index := binary.BigEndian.Uint64(indexData.([]byte))
-		if ai := this.node.appliedIndex; ai >= index { //FIXME
+		if ai := this.node.appliedIndex; ai >= index {
 			return this.store.Load(data)
 		} else {
 			// TODO: Implement this case by waiting for apply
@@ -158,9 +153,8 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 		return err
 	}
 	select {
-	case res := <-ch:
-		repl_res := res.(*internalNexusResponse)
-		return repl_res.Err
+	case <-ch:
+		return nil
 	case <-child_ctx.Done():
 		err := child_ctx.Err()
 		this.waiter.Trigger(confChange.ID, &internalNexusResponse{Err: err})
@@ -169,8 +163,8 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 }
 
 func (this *replicator) readCommits() {
-	for data := range this.node.commitC {
-		if data == nil {
+	for entry := range this.node.commitC {
+		if entry == nil {
 			log.Printf("[%d] Received a message in the commit channel with no data", this.node.id)
 			snapshot, err := this.node.snapshotter.Load()
 			if err == snap.ErrNoSnapshot {
@@ -185,16 +179,28 @@ func (this *replicator) readCommits() {
 				log.Panic(err)
 			}
 		} else {
-			if repl_req, err := unmarshal(data); err != nil {
-				log.Fatal(err)
-			} else {
-				repl_res := internalNexusResponse{}
-				// Forward to storage only the regular reqs and not conf change reqs
-				if repl_req.Req != nil {
-					repl_res.Res, repl_res.Err = this.store.Save(repl_req.Req)
+			if len(entry.Data) > 0 {
+				switch entry.Type {
+				case raftpb.EntryNormal:
+					var repl_req internalNexusRequest
+					if err := repl_req.unmarshal(entry.Data); err != nil {
+						log.Fatal(err)
+					} else {
+						repl_res := internalNexusResponse{}
+						repl_res.Res, repl_res.Err = this.store.Save(repl_req.Req)
+						this.waiter.Trigger(repl_req.ID, &repl_res)
+					}
+				case raftpb.EntryConfChange:
+					var cc raftpb.ConfChange
+					if err := cc.Unmarshal(entry.Data); err != nil {
+						log.Fatal(err)
+					} else {
+						this.waiter.Trigger(cc.ID, cc)
+					}
 				}
-				this.waiter.Trigger(repl_req.ID, &repl_res)
 			}
+			// after commit, update appliedIndex
+			this.node.appliedIndex = entry.Index
 		}
 	}
 	if err, present := <-this.node.errorC; present {
