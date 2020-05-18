@@ -41,8 +41,8 @@ import (
 // A key-value stream backed by raft
 type raftNode struct {
 	readStateC chan raft.ReadState // to send out readState
-	commitC    chan<- []byte       // entries committed to log (k,v)
-	errorC     chan<- error        // errors from raft session
+	commitC    chan []byte         // entries committed to log (k,v)
+	errorC     chan error          // errors from raft session
 
 	id          int      // client ID for raft session
 	peers       []string // raft peer URLs
@@ -78,7 +78,7 @@ var defaultSnapshotCount uint64 = 0
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries. To shutdown, close proposeC and read errorC.
-func NewRaftNode(opts pkg_raft.Options, getSnapshot func() ([]byte, error)) (*raftNode, <-chan raft.ReadState, <-chan []byte, <-chan error, <-chan struct{}) {
+func NewRaftNode(opts pkg_raft.Options, getSnapshot func() ([]byte, error)) *raftNode {
 
 	readStateC := make(chan raft.ReadState)
 	commitC := make(chan []byte)
@@ -101,7 +101,7 @@ func NewRaftNode(opts pkg_raft.Options, getSnapshot func() ([]byte, error)) (*ra
 		snapshotterReady: make(chan struct{}),
 		// rest of structure populated after WAL replay
 	}
-	return rc, readStateC, commitC, errorC, rc.snapshotterReady
+	return rc
 }
 
 func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {

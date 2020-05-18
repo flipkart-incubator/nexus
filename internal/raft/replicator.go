@@ -12,7 +12,6 @@ import (
 
 	"github.com/coreos/etcd/pkg/idutil"
 	"github.com/coreos/etcd/pkg/wait"
-	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
@@ -20,16 +19,12 @@ import (
 )
 
 type replicator struct {
-	node                 *raftNode
-	store                db.Store
-	confChangeCount      uint64
-	readChan             <-chan raft.ReadState
-	commitChan           <-chan []byte
-	errorChan            <-chan error
-	snapshotterReadyChan <-chan struct{}
-	replTimeout          time.Duration
-	waiter               wait.Wait
-	idGen                *idutil.Generator
+	node            *raftNode
+	store           db.Store
+	confChangeCount uint64
+	replTimeout     time.Duration
+	waiter          wait.Wait
+	idGen           *idutil.Generator
 }
 
 type internalNexusRequest struct {
@@ -63,7 +58,7 @@ func unmarshal(data []byte) (*internalNexusRequest, error) {
 
 func (this *replicator) Start() {
 	go this.node.startRaft()
-	<-this.snapshotterReadyChan
+	<-this.node.snapshotterReady
 	go this.readCommits()
 	go this.readReadStates()
 }
@@ -140,18 +135,14 @@ func (this *replicator) Stop() {
 }
 
 func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
-	raftNode, readC, commitC, errorC, snapshotterReadyC := NewRaftNode(options, store.Backup)
+	raftNode := NewRaftNode(options, store.Backup)
 	repl := &replicator{
-		node:                 raftNode,
-		store:                store,
-		confChangeCount:      uint64(0),
-		readChan:             readC,
-		commitChan:           commitC,
-		errorChan:            errorC,
-		snapshotterReadyChan: snapshotterReadyC,
-		replTimeout:          options.ReplTimeout(),
-		waiter:               wait.New(),
-		idGen:                idutil.NewGenerator(uint16(options.NodeId()), time.Now()),
+		node:            raftNode,
+		store:           store,
+		confChangeCount: uint64(0),
+		replTimeout:     options.ReplTimeout(),
+		waiter:          wait.New(),
+		idGen:           idutil.NewGenerator(uint16(options.NodeId()), time.Now()),
 	}
 	return repl
 }
@@ -178,7 +169,7 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 }
 
 func (this *replicator) readCommits() {
-	for data := range this.commitChan {
+	for data := range this.node.commitC {
 		if data == nil {
 			log.Printf("[%d] Received a message in the commit channel with no data", this.node.id)
 			snapshot, err := this.node.snapshotter.Load()
@@ -206,13 +197,13 @@ func (this *replicator) readCommits() {
 			}
 		}
 	}
-	if err, present := <-this.errorChan; present {
+	if err, present := <-this.node.errorC; present {
 		log.Fatal(err)
 	}
 }
 
 func (this *replicator) readReadStates() {
-	for rd := range this.readChan {
+	for rd := range this.node.readStateC {
 		id := binary.BigEndian.Uint64(rd.RequestCtx)
 		indexData := make([]byte, 8)
 		binary.BigEndian.PutUint64(indexData, rd.Index)
