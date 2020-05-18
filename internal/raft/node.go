@@ -40,8 +40,9 @@ import (
 
 // A key-value stream backed by raft
 type raftNode struct {
-	commitC chan<- []byte // entries committed to log (k,v)
-	errorC  chan<- error  // errors from raft session
+	readStateC chan raft.ReadState // to send out readState
+	commitC    chan<- []byte       // entries committed to log (k,v)
+	errorC     chan<- error        // errors from raft session
 
 	id          int      // client ID for raft session
 	peers       []string // raft peer URLs
@@ -77,12 +78,14 @@ var defaultSnapshotCount uint64 = 0
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries. To shutdown, close proposeC and read errorC.
-func NewRaftNode(opts pkg_raft.Options, getSnapshot func() ([]byte, error)) (*raftNode, <-chan []byte, <-chan error, <-chan struct{}) {
+func NewRaftNode(opts pkg_raft.Options, getSnapshot func() ([]byte, error)) (*raftNode, <-chan raft.ReadState, <-chan []byte, <-chan error, <-chan struct{}) {
 
+	readStateC := make(chan raft.ReadState)
 	commitC := make(chan []byte)
 	errorC := make(chan error)
 
 	rc := &raftNode{
+		readStateC:       readStateC,
 		commitC:          commitC,
 		errorC:           errorC,
 		id:               opts.NodeId(),
@@ -98,7 +101,7 @@ func NewRaftNode(opts pkg_raft.Options, getSnapshot func() ([]byte, error)) (*ra
 		snapshotterReady: make(chan struct{}),
 		// rest of structure populated after WAL replay
 	}
-	return rc, commitC, errorC, rc.snapshotterReady
+	return rc, readStateC, commitC, errorC, rc.snapshotterReady
 }
 
 func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
@@ -379,6 +382,19 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	rc.snapshotIndex = rc.appliedIndex
 }
 
+func (rc *raftNode) publishReadStates(readStates []raft.ReadState) bool {
+	// TODO: We can just publish the latest read state like etcd
+	for _, rs := range readStates {
+		select {
+		case rc.readStateC <- rs:
+		case <-rc.stopc:
+			return false
+		}
+	}
+
+	return true
+}
+
 func (rc *raftNode) serveChannels() {
 	snap, err := rc.raftStorage.Snapshot()
 	if err != nil {
@@ -401,6 +417,10 @@ func (rc *raftNode) serveChannels() {
 
 		// store raft entries to wal, then publish over commit channel
 		case rd := <-rc.node.Ready():
+			if ok := rc.publishReadStates(rd.ReadStates); !ok {
+				rc.stop()
+				return
+			}
 			rc.wal.Save(rd.HardState, rd.Entries)
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				rc.saveSnap(rd.Snapshot)

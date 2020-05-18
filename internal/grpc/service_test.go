@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -57,6 +58,11 @@ func (this *mockRepl) Start() {
 }
 
 func (this *mockRepl) Stop() {
+}
+
+func (this *mockRepl) Load(ctx context.Context, data []byte) ([]byte, error) {
+	id := binary.BigEndian.Uint32(data)
+	return this.data[id], nil
 }
 
 func (this *mockRepl) Save(ctx context.Context, data []byte) ([]byte, error) {

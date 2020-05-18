@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -19,6 +20,10 @@ func (this *redisStore) Close() error {
 
 func isRedisError(err error) bool {
 	return err != nil && !strings.HasSuffix(strings.TrimSpace(err.Error()), "nil")
+}
+
+func (this *redisStore) Load(data []byte) ([]byte, error) {
+	return nil, errors.New("Not implemented yet")
 }
 
 func (this *redisStore) Save(data []byte) ([]byte, error) {
