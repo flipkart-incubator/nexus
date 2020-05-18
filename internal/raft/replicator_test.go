@@ -70,8 +70,10 @@ func testSaveLoadData(t *testing.T) {
 }
 
 func testLoadTimingIssues(t *testing.T) {
+	pauseTime := 5 * time.Second
 	peer1, peer2, peer3 := clus.peers[0], clus.peers[1], clus.peers[2]
-	peer3.savePause(10 * time.Second)
+	// inject a pause inside peer3
+	peer3.savePause(pauseTime)
 	defer peer3.savePause(0)
 
 	req := &kvReq{fmt.Sprintf("LoadKey:%d", peer1.id), fmt.Sprintf("LoadVal:%d", peer1.id)}
@@ -79,9 +81,11 @@ func testLoadTimingIssues(t *testing.T) {
 
 	peer1.assertDB(t, req)
 	peer2.assertDB(t, req)
-	//peer3.assertDB(t, req)
 
 	peer3.expectLoadFailure(t, req)
+	// Allow peer3 to catchup
+	<-time.After(pauseTime)
+	peer3.assertDB(t, req)
 }
 
 func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
