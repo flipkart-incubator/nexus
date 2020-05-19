@@ -7,13 +7,22 @@ message Status {
   string message = 2;
 }
 
-message ReplicateResponse {
+message SaveRequest {
+  bytes data = 1;
+}
+
+message SaveResponse {
   Status status = 1;
   bytes data = 2;
 }
 
-message ReplicateRequest {
+message LoadRequest {
   bytes data = 1;
+}
+
+message LoadResponse {
+  Status status = 1;
+  bytes data = 2;
 }
 
 message AddNodeRequest {
@@ -26,7 +35,8 @@ message RemoveNodeRequest {
 }
 
 service Nexus {
-  rpc Replicate (ReplicateRequest) returns (ReplicateResponse);
+  rpc Save (SaveRequest) returns (SaveResponse);
+  rpc Load (LoadRequest) returns (LoadResponse);
   rpc AddNode (AddNodeRequest) returns (Status);
   rpc RemoveNode (RemoveNodeRequest) returns (Status);
 }

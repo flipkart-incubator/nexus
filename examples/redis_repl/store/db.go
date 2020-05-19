@@ -3,7 +3,6 @@ package store
 import (
 	"bytes"
 	"encoding/gob"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -23,11 +22,16 @@ func isRedisError(err error) bool {
 }
 
 func (this *redisStore) Load(data []byte) ([]byte, error) {
-	return nil, errors.New("Not implemented yet")
+	luaScript := string(data)
+	return this.evalLua(luaScript)
 }
 
 func (this *redisStore) Save(data []byte) ([]byte, error) {
 	luaScript := string(data)
+	return this.evalLua(luaScript)
+}
+
+func (this *redisStore) evalLua(luaScript string) ([]byte, error) {
 	if res, err := this.cli.Eval(luaScript, nil).Result(); isRedisError(err) {
 		return nil, err
 	} else {
