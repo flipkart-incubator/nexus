@@ -32,7 +32,7 @@ func TestReplicator(t *testing.T) {
 	defer clus.stop()
 
 	t.Run("testSaveLoadData", testSaveLoadData)
-	t.Run("testLoadTimingIssues", testLoadTimingIssues)
+	t.Run("testLoadDuringRestarts", testLoadDuringRestarts)
 	t.Run("testForNewNexusNodeJoinLeaveCluster", testForNewNexusNodeJoinLeaveCluster)
 	t.Run("testForNodeRestart", testForNodeRestart)
 }
@@ -69,23 +69,57 @@ func testSaveLoadData(t *testing.T) {
 	}
 }
 
-func testLoadTimingIssues(t *testing.T) {
-	pauseTime := 5 * time.Second
+func testLoadDuringRestarts(t *testing.T) {
 	peer1, peer2, peer3 := clus.peers[0], clus.peers[1], clus.peers[2]
-	// inject a pause inside peer3
-	peer3.savePause(pauseTime)
-	defer peer3.savePause(0)
+	// stop peer3
+	peer3.stop()
+	sleep(3)
 
-	req := &kvReq{fmt.Sprintf("LoadKey:%d", peer1.id), fmt.Sprintf("LoadVal:%d", peer1.id)}
-	peer1.save(t, req)
+	// insert few KVs on the remaining cluster via peer1
+	reqs := []*kvReq{
+		&kvReq{
+			fmt.Sprintf("LoadKey1:%d", peer1.id), fmt.Sprintf("LoadVal1:%d", peer1.id),
+		},
+		&kvReq{
+			fmt.Sprintf("LoadKey2:%d", peer1.id), fmt.Sprintf("LoadVal2:%d", peer1.id),
+		},
+		&kvReq{
+			fmt.Sprintf("LoadKey3:%d", peer1.id), fmt.Sprintf("LoadVal3:%d", peer1.id),
+		},
+	}
+	peer1.save(t, reqs...)
 
-	peer1.assertDB(t, req)
-	peer2.assertDB(t, req)
+	// assertions on peers
+	peer1.assertDB(t, reqs...)
+	peer2.assertDB(t, reqs...)
+	peer3.expectMismatchDB(t, reqs...)
 
-	peer3.expectLoadFailure(t, req)
-	// Allow peer3 to catchup
-	<-time.After(pauseTime)
-	peer3.assertDB(t, req)
+	// start peer3
+	var err error
+	peer3, err = newPeerWithDB(peer3.id, peer3.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clus.peers[2] = peer3
+	peer3.start()
+	sleep(3)
+
+	// load the entries on peer3 that were committed on other nodes
+	actVal := peer3.load(t, reqs[0]).(string)
+	if reqs[0].Val != actVal {
+		t.Errorf("Value mismatch for peer: %d. Key: %s, Expected Value: %s, Actual Value: %s", peer3.id, reqs[0].Key, reqs[0].Val, actVal)
+	}
+	actVal = peer3.load(t, reqs[1]).(string)
+	if reqs[1].Val != actVal {
+		t.Errorf("Value mismatch for peer: %d. Key: %s, Expected Value: %s, Actual Value: %s", peer3.id, reqs[1].Key, reqs[1].Val, actVal)
+	}
+	actVal = peer3.load(t, reqs[2]).(string)
+	if reqs[2].Val != actVal {
+		t.Errorf("Value mismatch for peer: %d. Key: %s, Expected Value: %s, Actual Value: %s", peer3.id, reqs[2].Key, reqs[2].Val, actVal)
+	}
+
+	// all assertions must work
+	peer3.assertDB(t, reqs...)
 }
 
 func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
@@ -192,9 +226,10 @@ func (this *cluster) assertDB(t *testing.T, reqs ...*kvReq) {
 }
 
 type peer struct {
-	id   int
-	db   *inMemKVStore
-	repl *replicator
+	id             int
+	db             *inMemKVStore
+	repl           *replicator
+	bakReplTimeout time.Duration
 }
 
 func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
@@ -209,7 +244,7 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 		return nil, err
 	} else {
 		repl := NewReplicator(db, opts)
-		return &peer{id, db, repl}, nil
+		return &peer{id, db, repl, repl.replTimeout}, nil
 	}
 }
 
@@ -232,7 +267,7 @@ func newJoiningPeer(id int, clusUrl string) (*peer, error) {
 	} else {
 		db := newInMemKVStore()
 		repl := NewReplicator(db, opts)
-		return &peer{id, db, repl}, nil
+		return &peer{id, db, repl, repl.replTimeout}, nil
 	}
 }
 
@@ -244,22 +279,16 @@ func (this *peer) stop() {
 	this.repl.Stop()
 }
 
-func (this *peer) loadPause(pauseTime time.Duration) {
-	this.db.pauseInLoadTime = pauseTime
-}
-
-func (this *peer) savePause(pauseTime time.Duration) {
-	this.db.pauseInSaveTime = pauseTime
-}
-
-func (this *peer) save(t *testing.T, req *kvReq) {
-	if bts, err := req.toBytes(); err != nil {
-		t.Fatal(err)
-	} else {
-		if _, err := this.repl.Save(context.Background(), bts); err != nil {
+func (this *peer) save(t *testing.T, reqs ...*kvReq) {
+	for _, req := range reqs {
+		if bts, err := req.toBytes(); err != nil {
 			t.Fatal(err)
 		} else {
-			sleep(1)
+			if _, err := this.repl.Save(context.Background(), bts); err != nil {
+				t.Fatal(err)
+			} else {
+				sleep(1)
+			}
 		}
 	}
 }
@@ -292,6 +321,22 @@ func (this *peer) load(t *testing.T, req *kvReq) interface{} {
 		}
 	}
 	return nil
+}
+
+func (this *peer) expectMismatchDB(t *testing.T, reqs ...*kvReq) {
+	mismatch := false
+	for _, req := range reqs {
+		if data, present := this.db.content[req.Key]; !present {
+			mismatch = true
+			break
+		} else if !reflect.DeepEqual(data, req.Val) {
+			mismatch = true
+			break
+		}
+	}
+	if !mismatch {
+		t.Errorf("Expected mismatch of DB for peer: %d", this.id)
+	}
 }
 
 func (this *peer) assertDB(t *testing.T, reqs ...*kvReq) {
@@ -330,9 +375,6 @@ func (this *kvReq) toBytes() ([]byte, error) {
 type inMemKVStore struct {
 	mu      sync.Mutex
 	content map[string]interface{}
-
-	// used for pausing the peer for simulating timing effects
-	pauseInSaveTime, pauseInLoadTime time.Duration
 }
 
 func newInMemKVStore() *inMemKVStore {
@@ -344,7 +386,6 @@ func (this *inMemKVStore) Close() error {
 }
 
 func (this *inMemKVStore) Load(data []byte) ([]byte, error) {
-	<-time.After(this.pauseInLoadTime)
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	if kvReq, err := fromBytes(data); err != nil {
@@ -360,7 +401,6 @@ func (this *inMemKVStore) Load(data []byte) ([]byte, error) {
 }
 
 func (this *inMemKVStore) Save(data []byte) ([]byte, error) {
-	<-time.After(this.pauseInSaveTime)
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	if kvReq, err := fromBytes(data); err != nil {

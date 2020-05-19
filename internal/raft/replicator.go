@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/gob"
-	"errors"
 	"log"
 	"sync/atomic"
 	"time"
@@ -24,6 +23,7 @@ type replicator struct {
 	confChangeCount uint64
 	replTimeout     time.Duration
 	waiter          wait.Wait
+	applyWait       wait.WaitTime
 	idGen           *idutil.Generator
 }
 
@@ -52,10 +52,9 @@ func (this *internalNexusRequest) unmarshal(data []byte) error {
 }
 
 func (this *replicator) Start() {
-	go this.node.startRaft()
-	<-this.node.snapshotterReady
 	go this.readCommits()
 	go this.readReadStates()
+	this.node.startRaft()
 }
 
 func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
@@ -68,7 +67,7 @@ func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 		child_ctx, cancel := context.WithTimeout(ctx, this.replTimeout)
 		defer cancel()
 		if err := this.node.node.Propose(child_ctx, repl_req_data); err != nil {
-			log.Printf("[WARN] Error while proposing to Raft. Message: %v.", err)
+			log.Printf("[WARN] [Node %v] Error while proposing to Raft. Message: %v.", this.node.id, err)
 			this.waiter.Trigger(repl_req.ID, &internalNexusResponse{Err: err})
 			return nil, err
 		}
@@ -93,20 +92,25 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 	idData := make([]byte, 8)
 	binary.BigEndian.PutUint64(idData, readReqId)
 	if err := this.node.node.ReadIndex(child_ctx, idData); err != nil {
-		log.Printf("[WARN] Error while reading index in Raft. Message: %v.", err)
+		log.Printf("[WARN] [Node %v] Error while reading index in Raft. Message: %v.", this.node.id, err)
 		this.waiter.Trigger(readReqId, &internalNexusResponse{Err: err})
 		return nil, err
 	}
 	select {
 	case indexData := <-ch:
 		index := binary.BigEndian.Uint64(indexData.([]byte))
-		if ai := this.node.appliedIndex; ai >= index {
-			return this.store.Load(data)
-		} else {
-			// TODO: Implement this case by waiting for apply
-			log.Printf("[WARN} Unable to read. Haven't applied this index yet. ReadIndex: %d, AppliedIndex: %d", index, ai)
-			return nil, errors.New("Not yet applied the read index")
+		if ai := this.node.appliedIndex; ai < index {
+			log.Printf("[WARN} [Node %v] Waiting for read index to be applied. ReadIndex: %d, AppliedIndex: %d", this.node.id, index, ai)
+			// wait for applied index to catchup
+			select {
+			case <-this.applyWait.Wait(index):
+			case <-child_ctx.Done():
+				err := child_ctx.Err()
+				this.waiter.Trigger(readReqId, &internalNexusResponse{Err: err})
+				return nil, err
+			}
 		}
+		return this.store.Load(data)
 	case <-child_ctx.Done():
 		err := child_ctx.Err()
 		this.waiter.Trigger(readReqId, &internalNexusResponse{Err: err})
@@ -137,6 +141,7 @@ func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
 		confChangeCount: uint64(0),
 		replTimeout:     options.ReplTimeout(),
 		waiter:          wait.New(),
+		applyWait:       wait.NewTimeList(),
 		idGen:           idutil.NewGenerator(uint16(options.NodeId()), time.Now()),
 	}
 	return repl
@@ -148,7 +153,7 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 	child_ctx, cancel := context.WithTimeout(ctx, this.replTimeout)
 	defer cancel()
 	if err := this.node.node.ProposeConfChange(ctx, confChange); err != nil {
-		log.Printf("[WARN] Error while proposing config change to Raft. Message: %v.", err)
+		log.Printf("[WARN] [Node %v] Error while proposing config change to Raft. Message: %v.", this.node.id, err)
 		this.waiter.Trigger(confChange.ID, &internalNexusResponse{Err: err})
 		return err
 	}
@@ -165,16 +170,16 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 func (this *replicator) readCommits() {
 	for entry := range this.node.commitC {
 		if entry == nil {
-			log.Printf("[%d] Received a message in the commit channel with no data", this.node.id)
+			log.Printf("[Node %v] Received a message in the commit channel with no data", this.node.id)
 			snapshot, err := this.node.snapshotter.Load()
 			if err == snap.ErrNoSnapshot {
-				log.Printf("[%d] WARNING - Received no snapshot error", this.node.id)
+				log.Printf("[Node %v] WARNING - Received no snapshot error", this.node.id)
 				continue
 			}
 			if err != nil {
 				log.Panic(err)
 			}
-			log.Printf("[%d] Loading snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
+			log.Printf("[Node %v] Loading snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
 			if err := this.store.Restore(snapshot.Data); err != nil {
 				log.Panic(err)
 			}
@@ -201,6 +206,7 @@ func (this *replicator) readCommits() {
 			}
 			// after commit, update appliedIndex
 			this.node.appliedIndex = entry.Index
+			this.applyWait.Trigger(entry.Index)
 		}
 	}
 	if err, present := <-this.node.errorC; present {
