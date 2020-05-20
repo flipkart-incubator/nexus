@@ -245,7 +245,7 @@ func (rc *raftNode) writeError(err error) {
 	rc.node.Stop()
 }
 
-func (rc *raftNode) startRaft() {
+func (rc *raftNode) startRaft(readOption raft.ReadOnlyOption) {
 	if !fileutil.Exist(rc.snapdir) {
 		if err := os.Mkdir(rc.snapdir, 0750); err != nil {
 			log.Fatalf("nexus.raft: [Node %v] cannot create dir for snapshot (%v)", rc.id, err)
@@ -267,6 +267,8 @@ func (rc *raftNode) startRaft() {
 		Storage:         rc.raftStorage,
 		MaxSizePerMsg:   1024 * 1024,
 		MaxInflightMsgs: 256,
+		ReadOnlyOption:  readOption,
+		CheckQuorum:     readOption == raft.ReadOnlyLeaseBased,
 	}
 
 	if oldwal {

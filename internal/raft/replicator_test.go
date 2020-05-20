@@ -226,10 +226,9 @@ func (this *cluster) assertDB(t *testing.T, reqs ...*kvReq) {
 }
 
 type peer struct {
-	id             int
-	db             *inMemKVStore
-	repl           *replicator
-	bakReplTimeout time.Duration
+	id   int
+	db   *inMemKVStore
+	repl *replicator
 }
 
 func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
@@ -239,12 +238,13 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 		raft.SnapDir(snapDir),
 		raft.ClusterUrl(clusterUrl),
 		raft.ReplicationTimeout(replTimeout),
+		raft.LeaseBasedReads(),
 	)
 	if err != nil {
 		return nil, err
 	} else {
 		repl := NewReplicator(db, opts)
-		return &peer{id, db, repl, repl.replTimeout}, nil
+		return &peer{id, db, repl}, nil
 	}
 }
 
@@ -260,6 +260,7 @@ func newJoiningPeer(id int, clusUrl string) (*peer, error) {
 		raft.SnapDir(snapDir),
 		raft.ClusterUrl(clusUrl),
 		raft.ReplicationTimeout(replTimeout),
+		raft.LeaseBasedReads(),
 		raft.Join(true), // `true` since this node is joining an existing cluster
 	)
 	if err != nil {
@@ -267,7 +268,7 @@ func newJoiningPeer(id int, clusUrl string) (*peer, error) {
 	} else {
 		db := newInMemKVStore()
 		repl := NewReplicator(db, opts)
-		return &peer{id, db, repl, repl.replTimeout}, nil
+		return &peer{id, db, repl}, nil
 	}
 }
 

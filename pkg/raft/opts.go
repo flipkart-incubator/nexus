@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/coreos/etcd/raft"
 )
 
 type Option func(*options) error
@@ -17,15 +19,17 @@ type Options interface {
 	SnapDir() string
 	ClusterUrls() []string
 	ReplTimeout() time.Duration
+	ReadOption() raft.ReadOnlyOption
 }
 
 type options struct {
-	nodeId      int
-	join        bool
-	logDir      string
-	snapDir     string
-	clusterUrl  string
-	replTimeout time.Duration
+	nodeId          int
+	join            bool
+	logDir          string
+	snapDir         string
+	clusterUrl      string
+	replTimeout     time.Duration
+	leaseBasedReads bool
 }
 
 var (
@@ -40,6 +44,7 @@ func init() {
 	flag.StringVar(&opts.snapDir, "nexusSnapDir", "/tmp/snap", "Dir for storing RAFT snapshots")
 	flag.StringVar(&opts.clusterUrl, "nexusClusterUrl", "", "Comma separated list of Nexus URLs")
 	flag.Int64Var(&replTimeoutInSecs, "nexusReplTimeout", 5, "Replication timeout in seconds")
+	flag.BoolVar(&opts.leaseBasedReads, "nexusLeaseBasedReads", false, "Perform reads using RAFT leader leases")
 }
 
 func OptionsFromFlags() []Option {
@@ -85,6 +90,13 @@ func (this *options) ClusterUrls() []string {
 
 func (this *options) ReplTimeout() time.Duration {
 	return this.replTimeout
+}
+
+func (this *options) ReadOption() raft.ReadOnlyOption {
+	if this.leaseBasedReads {
+		return raft.ReadOnlyLeaseBased
+	}
+	return raft.ReadOnlySafe
 }
 
 func NodeId(id int) Option {
@@ -140,6 +152,13 @@ func ReplicationTimeout(timeout time.Duration) Option {
 			return errors.New("Replication timeout must strictly be greater than 0")
 		}
 		opts.replTimeout = timeout
+		return nil
+	}
+}
+
+func LeaseBasedReads() Option {
+	return func(opts *options) error {
+		opts.leaseBasedReads = true
 		return nil
 	}
 }
