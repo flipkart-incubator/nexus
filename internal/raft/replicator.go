@@ -28,9 +28,8 @@ type replicator struct {
 }
 
 type internalNexusRequest struct {
-	ID      uint64
-	Req     []byte
-	ConfReq []byte
+	ID  uint64
+	Req []byte
 }
 
 type internalNexusResponse struct {
@@ -93,29 +92,33 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 	binary.BigEndian.PutUint64(idData, readReqId)
 	if err := this.node.node.ReadIndex(child_ctx, idData); err != nil {
 		log.Printf("[WARN] [Node %v] Error while reading index in Raft. Message: %v.", this.node.id, err)
-		this.waiter.Trigger(readReqId, &internalNexusResponse{Err: err})
+		this.waiter.Trigger(readReqId, err)
 		return nil, err
 	}
 	select {
-	case indexData := <-ch:
-		index := binary.BigEndian.Uint64(indexData.([]byte))
-		if ai := this.node.appliedIndex; ai < index {
-			log.Printf("[WARN} [Node %v] Waiting for read index to be applied. ReadIndex: %d, AppliedIndex: %d", this.node.id, index, ai)
-			// wait for applied index to catchup
-			select {
-			case <-this.applyWait.Wait(index):
-			case <-child_ctx.Done():
-				err := child_ctx.Err()
-				this.waiter.Trigger(readReqId, &internalNexusResponse{Err: err})
-				return nil, err
+	case idxRes := <-ch:
+		switch indexData := idxRes.(type) {
+		case []byte:
+			index := binary.BigEndian.Uint64(indexData)
+			if ai := this.node.appliedIndex; ai < index {
+				log.Printf("[WARN] [Node %v] Waiting for read index to be applied. ReadIndex: %d, AppliedIndex: %d", this.node.id, index, ai)
+				// wait for applied index to catchup
+				select {
+				case <-this.applyWait.Wait(index):
+				case <-child_ctx.Done():
+					return nil, child_ctx.Err()
+				}
 			}
+			return this.store.Load(data)
+		case error:
+			return nil, indexData
 		}
-		return this.store.Load(data)
 	case <-child_ctx.Done():
 		err := child_ctx.Err()
-		this.waiter.Trigger(readReqId, &internalNexusResponse{Err: err})
+		this.waiter.Trigger(readReqId, err)
 		return nil, err
 	}
+	return nil, nil
 }
 
 func (this *replicator) AddMember(ctx context.Context, nodeId int, nodeUrl string) error {
@@ -158,8 +161,8 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 		return err
 	}
 	select {
-	case <-ch:
-		return nil
+	case res := <-ch:
+		return res.(*internalNexusResponse).Err
 	case <-child_ctx.Done():
 		err := child_ctx.Err()
 		this.waiter.Trigger(confChange.ID, &internalNexusResponse{Err: err})
@@ -200,7 +203,7 @@ func (this *replicator) readCommits() {
 					if err := cc.Unmarshal(entry.Data); err != nil {
 						log.Fatal(err)
 					} else {
-						this.waiter.Trigger(cc.ID, cc)
+						this.waiter.Trigger(cc.ID, &internalNexusResponse{entry.Data, nil})
 					}
 				}
 			}
