@@ -135,7 +135,9 @@ contains 2 rows in it. Likewise any arbitrary SQL statements can be issued for s
 to all the 3 MySQL instances.
 
 ### Reads based on leader leases
-By default, reads performed over Nexus perform a round trip with all the replicas and results are returned based on the quorum. This is done to provide linearizable guarantees. However, if the performance cost of this round trip is undesirable, the flag `-nexusLeaseBasedReads` can be used to avoid the round trip during read time and instead return the latest value so long as the lease is active on the serving node. Periodically messages are exchanged with other replicas in order to ensure the current lease is still active.
+By default, reads performed over Nexus perform a round trip with all the replicas and results are returned based on the quorum. This is done to provide linearizable guarantees. However, if the performance cost of this round trip during read time is undesirable, the flag `-nexusLeaseBasedReads` can be used to avoid it and instead return the local copy so long as the lease is active on the serving node. Periodically messages are exchanged with other replicas so as to ensure the current lease is still active.
+
+Note that in environments where there can be unbounded clock drifts, this lease based approach can return stale results (non-linearizable) when the lease holder assumes its lease validity longer than it should, based on its local clock.
 
 ## Testing
 
