@@ -12,7 +12,7 @@ import (
 const (
 	ReadBufSize  = 10 << 30
 	WriteBufSize = 10 << 30
-	Timeout      = 1 * time.Second
+	Timeout      = 10 * time.Second
 )
 
 type NexusClient struct {

@@ -75,13 +75,10 @@ func (this *mysqlStore) Close() error {
 	return this.db.Close()
 }
 
-const txTimeout = 5 * time.Second // TODO: Should be configurable
+const txTimeout = 20 * time.Second // TODO: Should be configurable
 
-func (this *mysqlStore) load(sqlStmt string) (*sql.Rows, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), txTimeout)
-	defer cancel()
-
-	// TODO: Isolation level can be part of the SaveRequest itself ?
+func (this *mysqlStore) load(ctx context.Context, sqlStmt string) (*sql.Rows, error) {
+	// TODO: Isolation level can be part of the LoadRequest itself ?
 	if tx, err := this.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable, ReadOnly: true}); err != nil {
 		return nil, err
 	} else {
@@ -122,14 +119,16 @@ func (this *mysqlStore) Load(data []byte) ([]byte, error) {
 			if err := tmpl.Execute(&buf, load_req.Params); err != nil {
 				return nil, err
 			} else {
-				if rows, err := this.load(buf.String()); err != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), txTimeout)
+				defer cancel()
+				if rows, err := this.load(ctx, buf.String()); err != nil {
 					return nil, err
 				} else {
 					defer rows.Close()
 					var results []map[string]interface{}
 					cols, _ := rows.Columns()
 					for rows.Next() {
-						columns := make([]interface{}, len(cols))
+						columns := make([]string, len(cols))
 						columnPointers := make([]interface{}, len(cols))
 						for i, _ := range columns {
 							columnPointers[i] = &columns[i]
@@ -139,7 +138,7 @@ func (this *mysqlStore) Load(data []byte) ([]byte, error) {
 						}
 						row := make(map[string]interface{})
 						for i, colName := range cols {
-							val := columnPointers[i].(*interface{})
+							val := columnPointers[i].(*string)
 							row[colName] = *val
 						}
 						results = append(results, row)
@@ -167,7 +166,10 @@ func (this *mysqlStore) Save(data []byte) ([]byte, error) {
 				if res, err := this.save(buf.String()); err != nil {
 					return nil, err
 				} else {
-					return []byte(fmt.Sprintf("%#v", res)), nil
+					lastInsertId, _ := res.LastInsertId()
+					rowsAffected, _ := res.RowsAffected()
+					msg := fmt.Sprintf("{ LastInsertId: %v, RowsAffected: %v }", lastInsertId, rowsAffected)
+					return []byte(msg), nil
 				}
 			}
 		}
