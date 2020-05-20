@@ -92,14 +92,15 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 	binary.BigEndian.PutUint64(idData, readReqId)
 	if err := this.node.node.ReadIndex(child_ctx, idData); err != nil {
 		log.Printf("[WARN] [Node %v] Error while reading index in Raft. Message: %v.", this.node.id, err)
-		this.waiter.Trigger(readReqId, err)
+		this.waiter.Trigger(readReqId, &internalNexusResponse{Err: err})
 		return nil, err
 	}
 	select {
-	case idxRes := <-ch:
-		switch indexData := idxRes.(type) {
-		case []byte:
-			index := binary.BigEndian.Uint64(indexData)
+	case res := <-ch:
+		if inr := res.(*internalNexusResponse); inr.Err != nil {
+			return nil, inr.Err
+		} else {
+			index := binary.BigEndian.Uint64(inr.Res)
 			if ai := this.node.appliedIndex; ai < index {
 				log.Printf("[WARN] [Node %v] Waiting for read index to be applied. ReadIndex: %d, AppliedIndex: %d", this.node.id, index, ai)
 				// wait for applied index to catchup
@@ -110,15 +111,12 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 				}
 			}
 			return this.store.Load(data)
-		case error:
-			return nil, indexData
 		}
 	case <-child_ctx.Done():
 		err := child_ctx.Err()
-		this.waiter.Trigger(readReqId, err)
+		this.waiter.Trigger(readReqId, &internalNexusResponse{Err: err})
 		return nil, err
 	}
-	return nil, nil
 }
 
 func (this *replicator) AddMember(ctx context.Context, nodeId int, nodeUrl string) error {
@@ -222,6 +220,6 @@ func (this *replicator) readReadStates() {
 		id := binary.BigEndian.Uint64(rd.RequestCtx)
 		indexData := make([]byte, 8)
 		binary.BigEndian.PutUint64(indexData, rd.Index)
-		this.waiter.Trigger(id, indexData)
+		this.waiter.Trigger(id, &internalNexusResponse{indexData, nil})
 	}
 }
