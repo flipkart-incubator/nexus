@@ -21,8 +21,17 @@ func isRedisError(err error) bool {
 	return err != nil && !strings.HasSuffix(strings.TrimSpace(err.Error()), "nil")
 }
 
+func (this *redisStore) Load(data []byte) ([]byte, error) {
+	luaScript := string(data)
+	return this.evalLua(luaScript)
+}
+
 func (this *redisStore) Save(data []byte) ([]byte, error) {
 	luaScript := string(data)
+	return this.evalLua(luaScript)
+}
+
+func (this *redisStore) evalLua(luaScript string) ([]byte, error) {
 	if res, err := this.cli.Eval(luaScript, nil).Result(); isRedisError(err) {
 		return nil, err
 	} else {

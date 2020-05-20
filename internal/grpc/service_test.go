@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -34,7 +35,7 @@ func TestNexusService(t *testing.T) {
 }
 
 func replicate(t *testing.T, nc *NexusClient, data []byte) {
-	if _, err := nc.Replicate(data); err != nil {
+	if _, err := nc.Save(data); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -59,7 +60,12 @@ func (this *mockRepl) Start() {
 func (this *mockRepl) Stop() {
 }
 
-func (this *mockRepl) Replicate(ctx context.Context, data []byte) ([]byte, error) {
+func (this *mockRepl) Load(ctx context.Context, data []byte) ([]byte, error) {
+	id := binary.BigEndian.Uint32(data)
+	return this.data[id], nil
+}
+
+func (this *mockRepl) Save(ctx context.Context, data []byte) ([]byte, error) {
 	if hsh, err := hashCode(data); err != nil {
 		return nil, err
 	} else {

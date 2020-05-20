@@ -12,7 +12,7 @@ import (
 const (
 	ReadBufSize  = 10 << 30
 	WriteBufSize = 10 << 30
-	Timeout      = 1 * time.Second
+	Timeout      = 10 * time.Second
 )
 
 type NexusClient struct {
@@ -29,11 +29,26 @@ func NewInSecureNexusClient(svcAddr string) (*NexusClient, error) {
 	}
 }
 
-func (this *NexusClient) Replicate(data []byte) ([]byte, error) {
+func (this *NexusClient) Save(data []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	putReq := &api.ReplicateRequest{Data: data}
-	if res, err := this.nexusCli.Replicate(ctx, putReq); err != nil {
+	saveReq := &api.SaveRequest{Data: data}
+	if res, err := this.nexusCli.Save(ctx, saveReq); err != nil {
+		return nil, err
+	} else {
+		if res.Status.Code != 0 {
+			return nil, errors.New(res.Status.Message)
+		} else {
+			return res.Data, nil
+		}
+	}
+}
+
+func (this *NexusClient) Load(data []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	defer cancel()
+	loadReq := &api.LoadRequest{Data: data}
+	if res, err := this.nexusCli.Load(ctx, loadReq); err != nil {
 		return nil, err
 	} else {
 		if res.Status.Code != 0 {
