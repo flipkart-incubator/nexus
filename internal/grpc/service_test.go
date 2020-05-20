@@ -35,7 +35,7 @@ func TestNexusService(t *testing.T) {
 }
 
 func replicate(t *testing.T, nc *NexusClient, data []byte) {
-	if _, err := nc.Replicate(data); err != nil {
+	if _, err := nc.Save(data); err != nil {
 		t.Fatal(err)
 	}
 }
