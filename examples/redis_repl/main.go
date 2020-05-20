@@ -24,11 +24,11 @@ var (
 	stopChan  <-chan os.Signal
 	redisHost string
 	redisPort uint
-	nexusPort uint
+	grpcPort  uint
 )
 
 func init() {
-	flag.UintVar(&nexusPort, "nexusPort", 0, "Port on which Nexus GRPC server listens")
+	flag.UintVar(&grpcPort, "grpcPort", 0, "Port on which Nexus GRPC server listens")
 	flag.StringVar(&redisHost, "redisHost", "127.0.0.1", "Redis host")
 	flag.UintVar(&redisPort, "redisPort", 6379, "Redis port")
 	stopChan = setupSignalNotify()
@@ -40,7 +40,7 @@ func main() {
 		panic(err)
 	} else {
 		repl, _ := api.NewRaftReplicator(db, raft.OptionsFromFlags()...)
-		ns := grpc.NewNexusService(nexusPort, repl)
+		ns := grpc.NewNexusService(grpcPort, repl)
 		go ns.ListenAndServe()
 		sig := <-stopChan
 		log.Printf("[WARN] Caught signal: %v. Shutting down...", sig)
