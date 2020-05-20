@@ -17,16 +17,6 @@ import (
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
 )
 
-type replicator struct {
-	node            *raftNode
-	store           db.Store
-	confChangeCount uint64
-	replTimeout     time.Duration
-	waiter          wait.Wait
-	applyWait       wait.WaitTime
-	idGen           *idutil.Generator
-}
-
 type internalNexusRequest struct {
 	ID  uint64
 	Req []byte
@@ -50,10 +40,34 @@ func (this *internalNexusRequest) unmarshal(data []byte) error {
 	return gob.NewDecoder(buf).Decode(this)
 }
 
+type replicator struct {
+	node            *raftNode
+	store           db.Store
+	confChangeCount uint64
+	waiter          wait.Wait
+	applyWait       wait.WaitTime
+	idGen           *idutil.Generator
+	opts            pkg_raft.Options
+}
+
+func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
+	raftNode := NewRaftNode(options, store.Backup)
+	repl := &replicator{
+		node:            raftNode,
+		store:           store,
+		confChangeCount: uint64(0),
+		waiter:          wait.New(),
+		applyWait:       wait.NewTimeList(),
+		idGen:           idutil.NewGenerator(uint16(options.NodeId()), time.Now()),
+		opts:            options,
+	}
+	return repl
+}
+
 func (this *replicator) Start() {
 	go this.readCommits()
 	go this.readReadStates()
-	this.node.startRaft()
+	this.node.startRaft(this.opts.ReadOption())
 }
 
 func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
@@ -63,7 +77,7 @@ func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 		return nil, err
 	} else {
 		ch := this.waiter.Register(repl_req.ID)
-		child_ctx, cancel := context.WithTimeout(ctx, this.replTimeout)
+		child_ctx, cancel := context.WithTimeout(ctx, this.opts.ReplTimeout())
 		defer cancel()
 		if err := this.node.node.Propose(child_ctx, repl_req_data); err != nil {
 			log.Printf("[WARN] [Node %v] Error while proposing to Raft. Message: %v.", this.node.id, err)
@@ -86,7 +100,7 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 	// TODO: Validate raft state to check if Start() has been invoked
 	readReqId := this.idGen.Next()
 	ch := this.waiter.Register(readReqId)
-	child_ctx, cancel := context.WithTimeout(ctx, this.replTimeout)
+	child_ctx, cancel := context.WithTimeout(ctx, this.opts.ReplTimeout())
 	defer cancel()
 	idData := make([]byte, 8)
 	binary.BigEndian.PutUint64(idData, readReqId)
@@ -134,24 +148,10 @@ func (this *replicator) Stop() {
 	this.store.Close()
 }
 
-func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
-	raftNode := NewRaftNode(options, store.Backup)
-	repl := &replicator{
-		node:            raftNode,
-		store:           store,
-		confChangeCount: uint64(0),
-		replTimeout:     options.ReplTimeout(),
-		waiter:          wait.New(),
-		applyWait:       wait.NewTimeList(),
-		idGen:           idutil.NewGenerator(uint16(options.NodeId()), time.Now()),
-	}
-	return repl
-}
-
 func (this *replicator) proposeConfigChange(ctx context.Context, confChange raftpb.ConfChange) error {
 	confChange.ID = atomic.AddUint64(&this.confChangeCount, 1)
 	ch := this.waiter.Register(confChange.ID)
-	child_ctx, cancel := context.WithTimeout(ctx, this.replTimeout)
+	child_ctx, cancel := context.WithTimeout(ctx, this.opts.ReplTimeout())
 	defer cancel()
 	if err := this.node.node.ProposeConfChange(ctx, confChange); err != nil {
 		log.Printf("[WARN] [Node %v] Error while proposing config change to Raft. Message: %v.", this.node.id, err)
