@@ -44,7 +44,7 @@ func init() {
 	flag.StringVar(&opts.snapDir, "nexusSnapDir", "/tmp/snap", "Dir for storing RAFT snapshots")
 	flag.StringVar(&opts.clusterUrl, "nexusClusterUrl", "", "Comma separated list of Nexus URLs")
 	flag.Int64Var(&replTimeoutInSecs, "nexusReplTimeout", 5, "Replication timeout in seconds")
-	flag.BoolVar(&opts.leaseBasedReads, "nexusLeaseBasedReads", false, "Perform reads using RAFT leader leases")
+	flag.BoolVar(&opts.leaseBasedReads, "nexusLeaseBasedReads", true, "Perform reads using RAFT leader leases")
 }
 
 func OptionsFromFlags() []Option {
