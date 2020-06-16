@@ -55,6 +55,7 @@ func OptionsFromFlags() []Option {
 		SnapDir(opts.snapDir),
 		ClusterUrl(opts.clusterUrl),
 		ReplicationTimeout(time.Duration(replTimeoutInSecs) * time.Second),
+		LeaseBasedReads(opts.leaseBasedReads),
 	}
 }
 
@@ -156,9 +157,9 @@ func ReplicationTimeout(timeout time.Duration) Option {
 	}
 }
 
-func LeaseBasedReads() Option {
+func LeaseBasedReads(leaseBasedReads bool) Option {
 	return func(opts *options) error {
-		opts.leaseBasedReads = true
+		opts.leaseBasedReads = leaseBasedReads
 		return nil
 	}
 }

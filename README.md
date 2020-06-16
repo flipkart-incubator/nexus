@@ -9,7 +9,7 @@ can be achieved with few data stores.
 
 ## Features
 - Synchronous replication of user-defined datasets
-- Support for reads using leader leases
+- Support for linearizable reads
 - Support for addition & removal of replicas at runtime
 - Periodic data consistency checks across replicas [TODO]
 

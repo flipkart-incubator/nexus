@@ -238,7 +238,7 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 		raft.SnapDir(snapDir),
 		raft.ClusterUrl(clusterUrl),
 		raft.ReplicationTimeout(replTimeout),
-		raft.LeaseBasedReads(),
+		raft.LeaseBasedReads(false),
 	)
 	if err != nil {
 		return nil, err
@@ -260,7 +260,7 @@ func newJoiningPeer(id int, clusUrl string) (*peer, error) {
 		raft.SnapDir(snapDir),
 		raft.ClusterUrl(clusUrl),
 		raft.ReplicationTimeout(replTimeout),
-		raft.LeaseBasedReads(),
+		raft.LeaseBasedReads(false),
 		raft.Join(true), // `true` since this node is joining an existing cluster
 	)
 	if err != nil {
