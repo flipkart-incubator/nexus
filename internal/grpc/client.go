@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	ReadBufSize  = 10 << 30
-	WriteBufSize = 10 << 30
+	ReadBufSize  = 10 << 20
+	WriteBufSize = 10 << 20
 	Timeout      = 10 * time.Second
 )
 
