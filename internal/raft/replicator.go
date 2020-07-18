@@ -193,7 +193,10 @@ func (this *replicator) readCommits() {
 						log.Fatal(err)
 					} else {
 						repl_res := internalNexusResponse{}
+						log.Printf("[Node %v] Saving to underlying store. Index: %d", this.node.id, entry.Index)
+						beginTime := time.Now().Unix()
 						repl_res.Res, repl_res.Err = this.store.Save(repl_req.Req)
+						log.Printf("[Node %v] Completed save to underlying store. Index: %d, Took: %d ms", this.node.id, entry.Index, time.Now().Unix()-beginTime)
 						this.waiter.Trigger(repl_req.ID, &repl_res)
 					}
 				case raftpb.EntryConfChange:
