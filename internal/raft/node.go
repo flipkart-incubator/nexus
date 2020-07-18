@@ -163,6 +163,8 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 		case <-rc.stopc:
 			return false
 		}
+		// after commit, update appliedIndex
+		rc.appliedIndex = ents[i].Index
 
 		// special nil commit to signal replay has finished
 		if ents[i].Index == rc.lastIndex {

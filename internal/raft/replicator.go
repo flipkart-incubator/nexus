@@ -208,8 +208,7 @@ func (this *replicator) readCommits() {
 					}
 				}
 			}
-			// after commit, update appliedIndex
-			this.node.appliedIndex = entry.Index
+			// signal any linearizable reads blocked for this index
 			this.applyWait.Trigger(entry.Index)
 		}
 	}
