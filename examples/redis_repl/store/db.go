@@ -80,7 +80,7 @@ func (this *redisStore) loadAllData(redis_data map[string][]byte) error {
 }
 
 func (this *redisStore) Backup() ([]byte, error) {
-	if data, err := this.extractAllData(); err != nil {
+	if data, err := this.extractAllData(); isRedisError(err) {
 		return nil, err
 	} else {
 		var buf bytes.Buffer
@@ -97,7 +97,10 @@ func (this *redisStore) Restore(data []byte) error {
 	if err := gob.NewDecoder(buf).Decode(&redis_data); err != nil {
 		return err
 	}
-	return this.loadAllData(redis_data)
+	if err := this.loadAllData(redis_data); isRedisError(err) {
+		return err
+	}
+	return nil
 }
 
 func connect(redis_host string, redis_port uint) (*redis.Client, error) {
