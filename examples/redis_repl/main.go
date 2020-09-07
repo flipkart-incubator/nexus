@@ -34,8 +34,18 @@ func init() {
 	stopChan = setupSignalNotify()
 }
 
+func validateFlags() {
+	if grpcPort <= 0 || grpcPort > 65535 {
+		log.Panicf("Given GRPC port: %d of Nexus server is invalid", grpcPort)
+	}
+	if redisPort <= 0 || redisPort > 65535 {
+		log.Panicf("Given Redis port: %d is invalid", redisPort)
+	}
+}
+
 func main() {
 	flag.Parse()
+	validateFlags()
 	if db, err := store.NewRedisDB(redisHost, redisPort); err != nil {
 		panic(err)
 	} else {

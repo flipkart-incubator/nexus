@@ -1,9 +1,11 @@
 package store
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/go-redis/redis"
@@ -44,36 +46,54 @@ func (this *redisStore) evalLua(luaScript string) ([]byte, error) {
 	}
 }
 
-func (this *redisStore) extractAllData() (map[string][]byte, error) {
-	redis_data := make(map[string][]byte)
-	cursor := uint64(0)
+const REDIS_MAX_DB_COUNT = 16
 
-	for {
-		keys, new_cursor, err := this.cli.Scan(cursor, "", 1000).Result()
-		if err != nil {
-			return nil, err
-		}
-		for _, key := range keys {
-			if key_data, err := this.cli.Dump(key).Result(); err != nil {
+func (this *redisStore) extractAllData() ([]map[string][]byte, error) {
+	result := make([]map[string][]byte, REDIS_MAX_DB_COUNT)
+	for db := 0; db < REDIS_MAX_DB_COUNT; db++ {
+		cli := selectDB(db, this.cli)
+		cursor := uint64(0)
+		result[db] = make(map[string][]byte)
+
+		for {
+			keys, new_cursor, err := cli.Scan(cursor, "", 1000).Result()
+			if isRedisError(err) {
 				return nil, err
-			} else {
-				redis_data[key] = []byte(key_data)
 			}
-		}
-		if new_cursor == 0 {
-			break
-		} else {
-			cursor = new_cursor
+			for _, key := range keys {
+				if key_data, err := cli.Dump(key).Result(); isRedisError(err) {
+					return nil, err
+				} else {
+					result[db][key] = []byte(key_data)
+				}
+			}
+			if new_cursor == 0 {
+				break
+			} else {
+				cursor = new_cursor
+			}
 		}
 	}
 
-	return redis_data, nil
+	return result, nil
 }
 
-func (this *redisStore) loadAllData(redis_data map[string][]byte) error {
-	for k, v := range redis_data {
-		if _, err := this.cli.RestoreReplace(k, 0, string(v)).Result(); err != nil {
-			return err
+func (this *redisStore) loadAllData(redis_data_set []map[string][]byte, replaceable bool) error {
+	for dbIdx, redis_data := range redis_data_set {
+		cli := selectDB(dbIdx, this.cli)
+		for k, v := range redis_data {
+			if replaceable {
+				if err := cli.RestoreReplace(k, 0, string(v)).Err(); isRedisError(err) {
+					return err
+				}
+			} else {
+				if err := cli.Del(k).Err(); err != nil {
+					return err
+				}
+				if err := cli.Restore(k, 0, string(v)).Err(); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
@@ -92,15 +112,36 @@ func (this *redisStore) Backup() ([]byte, error) {
 }
 
 func (this *redisStore) Restore(data []byte) error {
-	redis_data := make(map[string][]byte)
+	var redis_data []map[string][]byte
 	buf := bytes.NewBuffer(data)
 	if err := gob.NewDecoder(buf).Decode(&redis_data); err != nil {
 		return err
 	}
-	if err := this.loadAllData(redis_data); isRedisError(err) {
+	if err := this.loadAllData(redis_data, this.restoreReplaceSupported()); isRedisError(err) {
 		return err
 	}
 	return nil
+}
+
+func (this *redisStore) restoreReplaceSupported() bool {
+	infoRes := this.cli.Info("server").Val()
+	scanner := bufio.NewScanner(strings.NewReader(infoRes))
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		txt := scanner.Text()
+		if strings.HasPrefix(txt, "redis_version") {
+			verStr := strings.Split(txt, ":")[1]
+			ver, _ := strconv.ParseFloat(verStr, 64)
+			return ver >= 3
+		}
+	}
+	return false
+}
+
+func selectDB(idx int, client *redis.Client) *redis.Client {
+	opts := client.Options()
+	opts.DB = idx
+	return redis.NewClient(opts)
 }
 
 func connect(redis_host string, redis_port uint) (*redis.Client, error) {
