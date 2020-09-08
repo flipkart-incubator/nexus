@@ -93,11 +93,12 @@ func TestBackupRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// delete all keys from all DBs
+	// overwrite all keys from all DBs
 	for db := 0; db < numDBs; db++ {
 		for ki := 0; ki < numKeys; ki++ {
 			key := fmt.Sprintf("%s_%d_%d", keyPref, ki, currTime)
-			deleteKey(t, key, db)
+			insertKey(t, key, "some_value", db)
+			//deleteKey(t, key, db)
 		}
 	}
 

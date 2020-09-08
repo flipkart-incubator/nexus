@@ -131,6 +131,7 @@ func (this *redisStore) restoreReplaceSupported() bool {
 		txt := scanner.Text()
 		if strings.HasPrefix(txt, "redis_version") {
 			verStr := strings.Split(txt, ":")[1]
+			verStr = strings.Split(verStr, ".")[0]
 			ver, _ := strconv.ParseFloat(verStr, 64)
 			return ver >= 3
 		}
