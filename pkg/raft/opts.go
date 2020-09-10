@@ -47,7 +47,7 @@ func init() {
 	flag.StringVar(&opts.clusterUrl, "nexusClusterUrl", "", "Comma separated list of Nexus URLs")
 	flag.Int64Var(&replTimeoutInSecs, "nexusReplTimeout", 5, "Replication timeout in seconds")
 	flag.BoolVar(&opts.leaseBasedReads, "nexusLeaseBasedReads", true, "Perform reads using RAFT leader leases")
-	flag.StringVar(&opts.statsdAddr, "nexusStatsDAddr", "", "StatsD server address for relaying various metrics")
+	flag.StringVar(&opts.statsdAddr, "nexusStatsDAddr", "", "StatsD server address (host:port) for relaying various metrics")
 }
 
 func OptionsFromFlags() []Option {

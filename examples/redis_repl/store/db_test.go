@@ -23,7 +23,7 @@ func TestMain(m *testing.M) {
 }
 
 func initRedisStore() {
-	if rs, err := NewRedisDB(redisHost, redisPort); err != nil {
+	if rs, err := NewRedisDB(redisHost, redisPort, nil); err != nil {
 		panic(err)
 	} else {
 		store = rs

@@ -75,9 +75,17 @@ func (this *replicator) incrStat(stat string, count int64, tags ...statsd.Tag) {
 	}
 }
 
-func (this *replicator) timingStat(stat string, timeInMillis int64, tags ...statsd.Tag) {
+func (this *replicator) startTimeStat() int64 {
 	if this.stats != nil {
-		this.stats.Timing(stat, timeInMillis, tags...)
+		return time.Now().UnixNano() / 1e6
+	}
+	return 0
+}
+
+func (this *replicator) endTimeStat(stat string, startTime int64, tags ...statsd.Tag) {
+	if this.stats != nil {
+		endTime := time.Now().UnixNano() / 1e6
+		this.stats.Timing(stat, endTime-startTime, tags...)
 	}
 }
 
@@ -122,7 +130,7 @@ func (this *replicator) Start() {
 
 func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 	// TODO: Validate raft state to check if Start() has been invoked
-	saveStartTime := time.Now().Unix()
+	defer this.endTimeStat("save.latency.ms", this.startTimeStat())
 	repl_req := &internalNexusRequest{ID: this.idGen.Next(), Req: data}
 	if repl_req_data, err := repl_req.marshal(); err != nil {
 		this.incrStat("save.marshal.error", 1)
@@ -140,7 +148,6 @@ func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 		select {
 		case res := <-ch:
 			repl_res := res.(*internalNexusResponse)
-			this.timingStat("save.latency.ms", time.Now().Unix()-saveStartTime)
 			return repl_res.Res, repl_res.Err
 		case <-child_ctx.Done():
 			err := child_ctx.Err()
@@ -153,7 +160,7 @@ func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 
 func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 	// TODO: Validate raft state to check if Start() has been invoked
-	loadStartTime := time.Now().Unix()
+	defer this.endTimeStat("load.latency.ms", this.startTimeStat())
 	readReqId := this.idGen.Next()
 	ch := this.waiter.Register(readReqId)
 	child_ctx, cancel := context.WithTimeout(ctx, this.opts.ReplTimeout())
@@ -182,7 +189,6 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 				}
 			}
 			res, err := this.store.Load(data)
-			this.timingStat("load.latency.ms", time.Now().Unix()-loadStartTime)
 			return res, err
 		}
 	case <-child_ctx.Done():
@@ -210,7 +216,7 @@ func (this *replicator) Stop() {
 }
 
 func (this *replicator) proposeConfigChange(ctx context.Context, confChange raftpb.ConfChange) error {
-	configChangeStartTime := time.Now().Unix()
+	defer this.endTimeStat("config.change.latency.ms", this.startTimeStat())
 	confChange.ID = atomic.AddUint64(&this.confChangeCount, 1)
 	ch := this.waiter.Register(confChange.ID)
 	child_ctx, cancel := context.WithTimeout(ctx, this.opts.ReplTimeout())
@@ -226,7 +232,6 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 			this.incrStat("config.change.error", 1)
 			return err
 		}
-		this.timingStat("config.change.latency.ms", time.Now().Unix()-configChangeStartTime)
 		return nil
 	case <-child_ctx.Done():
 		err := child_ctx.Err()
