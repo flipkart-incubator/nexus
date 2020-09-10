@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"log"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
+	"github.com/smira/go-statsd"
 )
 
 type internalNexusRequest struct {
@@ -47,7 +49,54 @@ type replicator struct {
 	waiter          wait.Wait
 	applyWait       wait.WaitTime
 	idGen           *idutil.Generator
+	stats           *statsd.Client
 	opts            pkg_raft.Options
+}
+
+const (
+	MetricPrefix     = "nexus."
+	NodeIdDefaultTag = "nodeId"
+)
+
+func initStatsD(opts pkg_raft.Options) *statsd.Client {
+	if statsdAddr := opts.StatsDAddr(); statsdAddr != "" {
+		return statsd.NewClient(statsdAddr,
+			statsd.TagStyle(statsd.TagFormatInfluxDB),
+			statsd.MetricPrefix(MetricPrefix),
+			statsd.DefaultTags(statsd.StringTag(NodeIdDefaultTag, strconv.Itoa(opts.NodeId()))),
+		)
+	}
+	return nil
+}
+
+func (this *replicator) incrStat(stat string, count int64, tags ...statsd.Tag) {
+	if this.stats != nil {
+		this.stats.Incr(stat, count, tags...)
+	}
+}
+
+func (this *replicator) timingStat(stat string, timeInMillis int64, tags ...statsd.Tag) {
+	if this.stats != nil {
+		this.stats.Timing(stat, timeInMillis, tags...)
+	}
+}
+
+func (this *replicator) gaugeStat(stat string, value int64, tags ...statsd.Tag) {
+	if this.stats != nil {
+		this.stats.Gauge(stat, value, tags...)
+	}
+}
+
+func (this *replicator) gaugeDeltaStat(stat string, delta int64, tags ...statsd.Tag) {
+	if this.stats != nil {
+		this.stats.GaugeDelta(stat, delta, tags...)
+	}
+}
+
+func (this *replicator) closeStats() {
+	if this.stats != nil {
+		this.stats.Close()
+	}
 }
 
 func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
@@ -59,6 +108,7 @@ func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
 		waiter:          wait.New(),
 		applyWait:       wait.NewTimeList(),
 		idGen:           idutil.NewGenerator(uint16(options.NodeId()), time.Now()),
+		stats:           initStatsD(options),
 		opts:            options,
 	}
 	return repl
@@ -72,8 +122,10 @@ func (this *replicator) Start() {
 
 func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 	// TODO: Validate raft state to check if Start() has been invoked
+	saveStartTime := time.Now().Unix()
 	repl_req := &internalNexusRequest{ID: this.idGen.Next(), Req: data}
 	if repl_req_data, err := repl_req.marshal(); err != nil {
+		this.incrStat("save.marshal.error", 1)
 		return nil, err
 	} else {
 		ch := this.waiter.Register(repl_req.ID)
@@ -82,15 +134,18 @@ func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 		if err := this.node.node.Propose(child_ctx, repl_req_data); err != nil {
 			log.Printf("[WARN] [Node %v] Error while proposing to Raft. Message: %v.", this.node.id, err)
 			this.waiter.Trigger(repl_req.ID, &internalNexusResponse{Err: err})
+			this.incrStat("raft.propose.error", 1)
 			return nil, err
 		}
 		select {
 		case res := <-ch:
 			repl_res := res.(*internalNexusResponse)
+			this.timingStat("save.latency.ms", time.Now().Unix()-saveStartTime)
 			return repl_res.Res, repl_res.Err
 		case <-child_ctx.Done():
 			err := child_ctx.Err()
 			this.waiter.Trigger(repl_req.ID, &internalNexusResponse{Err: err})
+			this.incrStat("save.timeout.error", 1)
 			return nil, err
 		}
 	}
@@ -98,6 +153,7 @@ func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 
 func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 	// TODO: Validate raft state to check if Start() has been invoked
+	loadStartTime := time.Now().Unix()
 	readReqId := this.idGen.Next()
 	ch := this.waiter.Register(readReqId)
 	child_ctx, cancel := context.WithTimeout(ctx, this.opts.ReplTimeout())
@@ -112,6 +168,7 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 	select {
 	case res := <-ch:
 		if inr := res.(*internalNexusResponse); inr.Err != nil {
+			this.incrStat("raft.read.index.error", 1)
 			return nil, inr.Err
 		} else {
 			index := binary.BigEndian.Uint64(inr.Res)
@@ -124,11 +181,14 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 					return nil, child_ctx.Err()
 				}
 			}
-			return this.store.Load(data)
+			res, err := this.store.Load(data)
+			this.timingStat("load.latency.ms", time.Now().Unix()-loadStartTime)
+			return res, err
 		}
 	case <-child_ctx.Done():
 		err := child_ctx.Err()
 		this.waiter.Trigger(readReqId, &internalNexusResponse{Err: err})
+		this.incrStat("load.timeout.error", 1)
 		return nil, err
 	}
 }
@@ -146,9 +206,11 @@ func (this *replicator) RemoveMember(ctx context.Context, nodeId int) error {
 func (this *replicator) Stop() {
 	close(this.node.stopc)
 	this.store.Close()
+	this.closeStats()
 }
 
 func (this *replicator) proposeConfigChange(ctx context.Context, confChange raftpb.ConfChange) error {
+	configChangeStartTime := time.Now().Unix()
 	confChange.ID = atomic.AddUint64(&this.confChangeCount, 1)
 	ch := this.waiter.Register(confChange.ID)
 	child_ctx, cancel := context.WithTimeout(ctx, this.opts.ReplTimeout())
@@ -160,10 +222,16 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 	}
 	select {
 	case res := <-ch:
-		return res.(*internalNexusResponse).Err
+		if err := res.(*internalNexusResponse).Err; err != nil {
+			this.incrStat("config.change.error", 1)
+			return err
+		}
+		this.timingStat("config.change.latency.ms", time.Now().Unix()-configChangeStartTime)
+		return nil
 	case <-child_ctx.Done():
 		err := child_ctx.Err()
 		this.waiter.Trigger(confChange.ID, &internalNexusResponse{Err: err})
+		this.incrStat("config.change.timeout.error", 1)
 		return err
 	}
 }

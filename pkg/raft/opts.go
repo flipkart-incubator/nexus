@@ -20,6 +20,7 @@ type Options interface {
 	ClusterUrls() []string
 	ReplTimeout() time.Duration
 	ReadOption() raft.ReadOnlyOption
+	StatsDAddr() string
 }
 
 type options struct {
@@ -30,6 +31,7 @@ type options struct {
 	clusterUrl      string
 	replTimeout     time.Duration
 	leaseBasedReads bool
+	statsdAddr      string
 }
 
 var (
@@ -45,6 +47,7 @@ func init() {
 	flag.StringVar(&opts.clusterUrl, "nexusClusterUrl", "", "Comma separated list of Nexus URLs")
 	flag.Int64Var(&replTimeoutInSecs, "nexusReplTimeout", 5, "Replication timeout in seconds")
 	flag.BoolVar(&opts.leaseBasedReads, "nexusLeaseBasedReads", true, "Perform reads using RAFT leader leases")
+	flag.StringVar(&opts.statsdAddr, "nexusStatsDAddr", "", "StatsD server address for relaying various metrics")
 }
 
 func OptionsFromFlags() []Option {
@@ -56,6 +59,7 @@ func OptionsFromFlags() []Option {
 		ClusterUrl(opts.clusterUrl),
 		ReplicationTimeout(time.Duration(replTimeoutInSecs) * time.Second),
 		LeaseBasedReads(opts.leaseBasedReads),
+		StatsDAddr(opts.statsdAddr),
 	}
 }
 
@@ -87,6 +91,10 @@ func (this *options) SnapDir() string {
 
 func (this *options) ClusterUrls() []string {
 	return strings.Split(this.clusterUrl, ",")
+}
+
+func (this *options) StatsDAddr() string {
+	return this.statsdAddr
 }
 
 func (this *options) ReplTimeout() time.Duration {
@@ -160,6 +168,15 @@ func ReplicationTimeout(timeout time.Duration) Option {
 func LeaseBasedReads(leaseBasedReads bool) Option {
 	return func(opts *options) error {
 		opts.leaseBasedReads = leaseBasedReads
+		return nil
+	}
+}
+
+func StatsDAddr(statsdAddr string) Option {
+	return func(opts *options) error {
+		if statsdAddr = strings.TrimSpace(statsdAddr); statsdAddr != "" {
+			opts.statsdAddr = statsdAddr
+		}
 		return nil
 	}
 }

@@ -46,6 +46,7 @@ func validateFlags() {
 func main() {
 	flag.Parse()
 	validateFlags()
+
 	if db, err := store.NewRedisDB(redisHost, redisPort); err != nil {
 		panic(err)
 	} else {
