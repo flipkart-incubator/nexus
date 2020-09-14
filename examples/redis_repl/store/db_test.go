@@ -121,3 +121,8 @@ func TestRestoreReplaceSupported(t *testing.T) {
 	res := store.restoreReplaceSupported()
 	t.Logf("Restore replace supported: %v", res)
 }
+
+func TestMaxDBIdx(t *testing.T) {
+	dbIdx := store.getMaxDBIdx()
+	t.Logf("Max DB index: %d", dbIdx)
+}

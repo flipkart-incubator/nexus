@@ -79,11 +79,10 @@ func (this *redisStore) evalLua(luaScript string) ([]byte, error) {
 	}
 }
 
-const REDIS_MAX_DB_COUNT = 16
-
 func (this *redisStore) extractAllData() ([]map[string][]byte, error) {
-	result := make([]map[string][]byte, REDIS_MAX_DB_COUNT)
-	for db := 0; db < REDIS_MAX_DB_COUNT; db++ {
+	maxDBs := this.getMaxDBIdx()
+	result := make([]map[string][]byte, maxDBs)
+	for db := 0; db < maxDBs; db++ {
 		cli := selectDB(db, this.cli)
 		cursor := uint64(0)
 		result[db] = make(map[string][]byte)
@@ -182,6 +181,13 @@ func selectDB(idx int, client *redis.Client) *redis.Client {
 	opts := client.Options()
 	opts.DB = idx
 	return redis.NewClient(opts)
+}
+
+func (this *redisStore) getMaxDBIdx() int {
+	res, _ := this.cli.ConfigGet("databases").Result()
+	dbIdxStr := res[1].(string)
+	dbIdx, _ := strconv.Atoi(dbIdxStr)
+	return dbIdx
 }
 
 func connect(redis_host string, redis_port uint) (*redis.Client, error) {
