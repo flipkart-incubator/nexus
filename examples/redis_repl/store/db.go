@@ -179,8 +179,9 @@ func (this *redisStore) restoreReplaceSupported() bool {
 
 func selectDB(idx int, client *redis.Client) *redis.Client {
 	opts := client.Options()
-	opts.DB = idx
-	return redis.NewClient(opts)
+	newOpts := *opts
+	newOpts.DB = idx
+	return redis.NewClient(&newOpts)
 }
 
 func (this *redisStore) getMaxDBIdx() int {

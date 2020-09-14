@@ -126,3 +126,11 @@ func TestMaxDBIdx(t *testing.T) {
 	dbIdx := store.getMaxDBIdx()
 	t.Logf("Max DB index: %d", dbIdx)
 }
+
+func TestSelectDB(t *testing.T) {
+	oldCli := store.cli
+	newCli := selectDB(3, oldCli)
+
+	t.Logf("Old client's selected DB: %d", oldCli.Options().DB)
+	t.Logf("New client's selected DB: %d", newCli.Options().DB)
+}
