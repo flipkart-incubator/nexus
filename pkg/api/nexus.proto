@@ -13,7 +13,8 @@ message SaveRequest {
 
 message SaveResponse {
   Status status = 1;
-  bytes data = 2;
+  bytes reqData = 2;
+  bytes resData = 3;
 }
 
 message LoadRequest {
@@ -22,7 +23,8 @@ message LoadRequest {
 
 message LoadResponse {
   Status status = 1;
-  bytes data = 2;
+  bytes reqData = 2;
+  bytes resData = 3;
 }
 
 message AddNodeRequest {

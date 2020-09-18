@@ -39,7 +39,7 @@ func (this *NexusClient) Save(data []byte) ([]byte, error) {
 		if res.Status.Code != 0 {
 			return nil, errors.New(res.Status.Message)
 		} else {
-			return res.Data, nil
+			return res.ResData, nil
 		}
 	}
 }
@@ -54,7 +54,7 @@ func (this *NexusClient) Load(data []byte) ([]byte, error) {
 		if res.Status.Code != 0 {
 			return nil, errors.New(res.Status.Message)
 		} else {
-			return res.Data, nil
+			return res.ResData, nil
 		}
 	}
 }
