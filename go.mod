@@ -22,6 +22,7 @@ require (
 )
 
 replace (
+	cloud.google.com/go => github.com/googleapis/google-cloud-go v0.26.0
 	golang.org/x/crypto => github.com/golang/crypto v0.0.0-20190510104115-cbcb75029529
 	golang.org/x/exp => github.com/golang/exp v0.0.0-20190121172915-509febef88a4
 	golang.org/x/lint => github.com/golang/lint v0.0.0-20190930215403-16217165b5de
