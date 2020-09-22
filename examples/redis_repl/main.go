@@ -70,11 +70,14 @@ func main() {
 	} else {
 		nexusOpts := raft.OptionsFromFlags()
 		nexusOpts = append(nexusOpts, raft.StatsDAddr(statsdAddr))
-		repl, _ := api.NewRaftReplicator(db, nexusOpts...)
-		ns := grpc.NewNexusService(grpcPort, repl)
-		go ns.ListenAndServe()
-		sig := <-stopChan
-		log.Printf("[WARN] Caught signal: %v. Shutting down...", sig)
-		ns.Close()
+		if repl, err := api.NewRaftReplicator(db, nexusOpts...); err != nil {
+			panic(err)
+		} else {
+			ns := grpc.NewNexusService(grpcPort, repl)
+			go ns.ListenAndServe()
+			sig := <-stopChan
+			log.Printf("[WARN] Caught signal: %v. Shutting down...", sig)
+			ns.Close()
+		}
 	}
 }

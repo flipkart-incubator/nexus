@@ -37,11 +37,14 @@ func main() {
 	if db, err := store.NewMySQLDB(mysqlConnUrl); err != nil {
 		panic(err)
 	} else {
-		repl, _ := api.NewRaftReplicator(db, raft.OptionsFromFlags()...)
-		ns := grpc.NewNexusService(port, repl)
-		go ns.ListenAndServe()
-		sig := <-stopChan
-		log.Printf("[WARN] Caught signal: %v. Shutting down...", sig)
-		ns.Close()
+		if repl, err := api.NewRaftReplicator(db, raft.OptionsFromFlags()...); err != nil {
+			panic(err)
+		} else {
+			ns := grpc.NewNexusService(port, repl)
+			go ns.ListenAndServe()
+			sig := <-stopChan
+			log.Printf("[WARN] Caught signal: %v. Shutting down...", sig)
+			ns.Close()
+		}
 	}
 }
