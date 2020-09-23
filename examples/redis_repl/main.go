@@ -53,7 +53,7 @@ func validateFlags() {
 func initStatsD() *statsd.Client {
 	if statsdAddr != "" {
 		return statsd.NewClient(statsdAddr,
-			statsd.TagStyle(statsd.TagFormatInfluxDB),
+			statsd.TagStyle(statsd.TagFormatDatadog),
 			statsd.MetricPrefix("nexus_redis."),
 		)
 	}

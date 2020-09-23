@@ -61,7 +61,7 @@ const (
 func initStatsD(opts pkg_raft.Options) *statsd.Client {
 	if statsdAddr := opts.StatsDAddr(); statsdAddr != "" {
 		return statsd.NewClient(statsdAddr,
-			statsd.TagStyle(statsd.TagFormatInfluxDB),
+			statsd.TagStyle(statsd.TagFormatDatadog),
 			statsd.MetricPrefix(MetricPrefix),
 			statsd.DefaultTags(statsd.StringTag(NodeIdDefaultTag, strconv.Itoa(opts.NodeId()))),
 		)
