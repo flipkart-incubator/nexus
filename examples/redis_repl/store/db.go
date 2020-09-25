@@ -54,13 +54,13 @@ func isRedisError(err error) bool {
 }
 
 func (this *redisStore) Load(data []byte) ([]byte, error) {
-	defer this.endTimeStat("load.latency.ms", this.startTimeStat())
+	defer this.endTimeStat("redis_load.latency.ms", this.startTimeStat())
 	luaScript := string(data)
 	return this.evalLua(luaScript)
 }
 
 func (this *redisStore) Save(data []byte) ([]byte, error) {
-	defer this.endTimeStat("save.latency.ms", this.startTimeStat())
+	defer this.endTimeStat("redis_save.latency.ms", this.startTimeStat())
 	luaScript := string(data)
 	return this.evalLua(luaScript)
 }
@@ -132,7 +132,7 @@ func (this *redisStore) loadAllData(redis_data_set []map[string][]byte, replacea
 }
 
 func (this *redisStore) Backup() ([]byte, error) {
-	defer this.endTimeStat("backup.latency.ms", this.startTimeStat())
+	defer this.endTimeStat("redis_backup.latency.ms", this.startTimeStat())
 	if data, err := this.extractAllData(); isRedisError(err) {
 		this.incrStat("backup.extract.error", 1)
 		return nil, err
@@ -147,7 +147,7 @@ func (this *redisStore) Backup() ([]byte, error) {
 }
 
 func (this *redisStore) Restore(data []byte) error {
-	defer this.endTimeStat("restore.latency.ms", this.startTimeStat())
+	defer this.endTimeStat("redis_restore.latency.ms", this.startTimeStat())
 	var redis_data []map[string][]byte
 	buf := bytes.NewBuffer(data)
 	if err := gob.NewDecoder(buf).Decode(&redis_data); err != nil {
