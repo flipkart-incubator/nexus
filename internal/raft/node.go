@@ -63,11 +63,12 @@ type raftNode struct {
 
 	snapshotter *snap.Snapshotter
 
-	snapCount uint64
-	transport *rafthttp.Transport
-	stopc     chan struct{} // signals proposal channel closed
-	httpstopc chan struct{} // signals http server to shutdown
-	httpdonec chan struct{} // signals http server shutdown complete
+	snapCount  uint64
+	transport  *rafthttp.Transport
+	stopc      chan struct{} // signals proposal channel closed
+	httpstopc  chan struct{} // signals http server to shutdown
+	httpdonec  chan struct{} // signals http server shutdown complete
+	readOption raft.ReadOnlyOption
 }
 
 var defaultSnapshotCount uint64 = 10000
@@ -97,6 +98,7 @@ func NewRaftNode(opts pkg_raft.Options, getSnapshot func() ([]byte, error)) *raf
 		stopc:       make(chan struct{}),
 		httpstopc:   make(chan struct{}),
 		httpdonec:   make(chan struct{}),
+		readOption:  opts.ReadOption(),
 		// rest of structure populated after WAL replay
 	}
 	return rc
@@ -247,7 +249,7 @@ func (rc *raftNode) writeError(err error) {
 	rc.node.Stop()
 }
 
-func (rc *raftNode) startRaft(readOption raft.ReadOnlyOption) {
+func (rc *raftNode) startRaft() {
 	if !fileutil.Exist(rc.snapdir) {
 		if err := os.Mkdir(rc.snapdir, 0750); err != nil {
 			log.Fatalf("nexus.raft: [Node %v] cannot create dir for snapshot (%v)", rc.id, err)
@@ -269,8 +271,8 @@ func (rc *raftNode) startRaft(readOption raft.ReadOnlyOption) {
 		Storage:         rc.raftStorage,
 		MaxSizePerMsg:   1024 * 1024,
 		MaxInflightMsgs: 256,
-		ReadOnlyOption:  readOption,
-		CheckQuorum:     readOption == raft.ReadOnlyLeaseBased,
+		ReadOnlyOption:  rc.readOption,
+		CheckQuorum:     rc.readOption == raft.ReadOnlyLeaseBased,
 	}
 
 	if oldwal {

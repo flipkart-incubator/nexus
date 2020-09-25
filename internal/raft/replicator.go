@@ -125,7 +125,7 @@ func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
 func (this *replicator) Start() {
 	go this.readCommits()
 	go this.readReadStates()
-	this.node.startRaft(this.opts.ReadOption())
+	this.node.startRaft()
 }
 
 func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
