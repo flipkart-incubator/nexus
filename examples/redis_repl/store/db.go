@@ -7,45 +7,18 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/flipkart-incubator/nexus/internal/stats"
 	"github.com/go-redis/redis"
-	"github.com/smira/go-statsd"
 )
 
 type redisStore struct {
-	cli   *redis.Client
-	stats *statsd.Client
-}
-
-func (this *redisStore) incrStat(stat string, count int64, tags ...statsd.Tag) {
-	if this.stats != nil {
-		this.stats.Incr(stat, count, tags...)
-	}
-}
-
-func (this *redisStore) endTimeStat(stat string, startTime int64, tags ...statsd.Tag) {
-	if this.stats != nil {
-		endTime := time.Now().UnixNano() / 1e6
-		this.stats.Timing(stat, endTime-startTime, tags...)
-	}
-}
-
-func (this *redisStore) startTimeStat() int64 {
-	if this.stats != nil {
-		return time.Now().UnixNano() / 1e6
-	}
-	return 0
-}
-
-func (this *redisStore) closeStats() {
-	if this.stats != nil {
-		this.stats.Close()
-	}
+	cli      *redis.Client
+	statsCli stats.Client
 }
 
 func (this *redisStore) Close() error {
-	this.closeStats()
+	this.statsCli.Close()
 	return this.cli.Close()
 }
 
@@ -54,20 +27,20 @@ func isRedisError(err error) bool {
 }
 
 func (this *redisStore) Load(data []byte) ([]byte, error) {
-	defer this.endTimeStat("redis_load.latency.ms", this.startTimeStat())
+	defer this.statsCli.EndTiming("redis_load.latency.ms", this.statsCli.StartTiming())
 	luaScript := string(data)
 	return this.evalLua(luaScript)
 }
 
 func (this *redisStore) Save(data []byte) ([]byte, error) {
-	defer this.endTimeStat("redis_save.latency.ms", this.startTimeStat())
+	defer this.statsCli.EndTiming("redis_save.latency.ms", this.statsCli.StartTiming())
 	luaScript := string(data)
 	return this.evalLua(luaScript)
 }
 
 func (this *redisStore) evalLua(luaScript string) ([]byte, error) {
 	if res, err := this.cli.Eval(luaScript, nil).Result(); isRedisError(err) {
-		this.incrStat("eval.lua.error", 1)
+		this.statsCli.Incr("eval.lua.error", 1)
 		return nil, err
 	} else {
 		if res == nil {
@@ -132,14 +105,14 @@ func (this *redisStore) loadAllData(redis_data_set []map[string][]byte, replacea
 }
 
 func (this *redisStore) Backup() ([]byte, error) {
-	defer this.endTimeStat("redis_backup.latency.ms", this.startTimeStat())
+	defer this.statsCli.EndTiming("redis_backup.latency.ms", this.statsCli.StartTiming())
 	if data, err := this.extractAllData(); isRedisError(err) {
-		this.incrStat("backup.extract.error", 1)
+		this.statsCli.Incr("backup.extract.error", 1)
 		return nil, err
 	} else {
 		var buf bytes.Buffer
 		if err := gob.NewEncoder(&buf).Encode(data); err != nil {
-			this.incrStat("backup.encode.error", 1)
+			this.statsCli.Incr("backup.encode.error", 1)
 			return nil, err
 		}
 		return buf.Bytes(), nil
@@ -147,15 +120,15 @@ func (this *redisStore) Backup() ([]byte, error) {
 }
 
 func (this *redisStore) Restore(data []byte) error {
-	defer this.endTimeStat("redis_restore.latency.ms", this.startTimeStat())
+	defer this.statsCli.EndTiming("redis_restore.latency.ms", this.statsCli.StartTiming())
 	var redis_data []map[string][]byte
 	buf := bytes.NewBuffer(data)
 	if err := gob.NewDecoder(buf).Decode(&redis_data); err != nil {
-		this.incrStat("restore.decode.error", 1)
+		this.statsCli.Incr("restore.decode.error", 1)
 		return err
 	}
 	if err := this.loadAllData(redis_data, this.restoreReplaceSupported()); isRedisError(err) {
-		this.incrStat("restore.load.error", 1)
+		this.statsCli.Incr("restore.load.error", 1)
 		return err
 	}
 	return nil
@@ -201,10 +174,10 @@ func connect(redis_host string, redis_port uint) (*redis.Client, error) {
 	return client, err
 }
 
-func NewRedisDB(host string, port uint, stats *statsd.Client) (*redisStore, error) {
+func NewRedisDB(host string, port uint, statsCli stats.Client) (*redisStore, error) {
 	if cli, err := connect(host, port); err != nil {
 		return nil, err
 	} else {
-		return &redisStore{cli, stats}, nil
+		return &redisStore{cli, statsCli}, nil
 	}
 }

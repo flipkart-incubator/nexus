@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/flipkart-incubator/nexus/internal/stats"
 )
 
 var store *redisStore
@@ -23,7 +25,7 @@ func TestMain(m *testing.M) {
 }
 
 func initRedisStore() {
-	if rs, err := NewRedisDB(redisHost, redisPort, nil); err != nil {
+	if rs, err := NewRedisDB(redisHost, redisPort, stats.NewNoOpClient()); err != nil {
 		panic(err)
 	} else {
 		store = rs

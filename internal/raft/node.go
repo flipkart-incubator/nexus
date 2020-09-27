@@ -25,9 +25,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/flipkart-incubator/nexus/internal/stats"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
 
-	"github.com/coreos/etcd/etcdserver/stats"
+	etcd_stats "github.com/coreos/etcd/etcdserver/stats"
 	"github.com/coreos/etcd/pkg/fileutil"
 	"github.com/coreos/etcd/pkg/types"
 	"github.com/coreos/etcd/raft"
@@ -69,6 +70,7 @@ type raftNode struct {
 	httpstopc  chan struct{} // signals http server to shutdown
 	httpdonec  chan struct{} // signals http server shutdown complete
 	readOption raft.ReadOnlyOption
+	statsCli   stats.Client
 }
 
 var defaultSnapshotCount uint64 = 10000
@@ -78,7 +80,7 @@ var defaultSnapshotCount uint64 = 10000
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries. To shutdown, close proposeC and read errorC.
-func NewRaftNode(opts pkg_raft.Options, getSnapshot func() ([]byte, error)) *raftNode {
+func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func() ([]byte, error)) *raftNode {
 
 	readStateC := make(chan raft.ReadState)
 	commitC := make(chan *raftpb.Entry)
@@ -99,6 +101,7 @@ func NewRaftNode(opts pkg_raft.Options, getSnapshot func() ([]byte, error)) *raf
 		httpstopc:   make(chan struct{}),
 		httpdonec:   make(chan struct{}),
 		readOption:  opts.ReadOption(),
+		statsCli:    statsCli,
 		// rest of structure populated after WAL replay
 	}
 	return rc
@@ -289,8 +292,8 @@ func (rc *raftNode) startRaft() {
 		ID:          types.ID(rc.id),
 		ClusterID:   0x1000,
 		Raft:        rc,
-		ServerStats: stats.NewServerStats("", ""),
-		LeaderStats: stats.NewLeaderStats(strconv.Itoa(rc.id)),
+		ServerStats: etcd_stats.NewServerStats("", ""),
+		LeaderStats: etcd_stats.NewLeaderStats(strconv.Itoa(rc.id)),
 		ErrorC:      make(chan error),
 	}
 
@@ -398,8 +401,11 @@ func (rc *raftNode) serveChannels() {
 	// event loop on raft state machine updates
 	for {
 		select {
-		case <-ticker.C:
+		case tick := <-ticker.C:
+			rc.statsCli.GaugeDelta("raft.ticks", 1)
 			rc.node.Tick()
+			rc.statsCli.EndTiming("raft.tick.timing", tick.Unix())
+			rc.statsCli.GaugeDelta("raft.ticks", -1)
 
 		// store raft entries to wal, then publish over commit channel
 		case rd := <-rc.node.Ready():

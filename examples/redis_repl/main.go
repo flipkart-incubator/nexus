@@ -10,9 +10,9 @@ import (
 
 	"github.com/flipkart-incubator/nexus/examples/redis_repl/store"
 	"github.com/flipkart-incubator/nexus/internal/grpc"
+	"github.com/flipkart-incubator/nexus/internal/stats"
 	"github.com/flipkart-incubator/nexus/pkg/api"
 	"github.com/flipkart-incubator/nexus/pkg/raft"
-	"github.com/smira/go-statsd"
 )
 
 func setupSignalNotify() <-chan os.Signal {
@@ -50,14 +50,11 @@ func validateFlags() {
 	}
 }
 
-func initStatsD() *statsd.Client {
+func initStatsD() stats.Client {
 	if statsdAddr != "" {
-		return statsd.NewClient(statsdAddr,
-			statsd.TagStyle(statsd.TagFormatDatadog),
-			statsd.MetricPrefix("nexus_redis."),
-		)
+		return stats.NewStatsDClient(statsdAddr, "nexus_redis")
 	}
-	return nil
+	return stats.NewNoOpClient()
 }
 
 func main() {
