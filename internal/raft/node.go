@@ -402,10 +402,8 @@ func (rc *raftNode) serveChannels() {
 	for {
 		select {
 		case tick := <-ticker.C:
-			rc.statsCli.GaugeDelta("raft.ticks", 1)
 			rc.node.Tick()
-			rc.statsCli.EndTiming("raft.tick.timing", tick.Unix())
-			rc.statsCli.GaugeDelta("raft.ticks", -1)
+			rc.statsCli.Timing("raft.tick.processing.latency.ms", tick)
 
 		// store raft entries to wal, then publish over commit channel
 		case rd := <-rc.node.Ready():

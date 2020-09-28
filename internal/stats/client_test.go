@@ -29,7 +29,7 @@ func TestStatsDClient(t *testing.T) {
 
 	s, w := bufio.NewScanner(conn), bufio.NewWriter(conn)
 	//flushDuration := statsdFlushInterval(s, w)
-	flushDuration := time.Duration(1) * time.Second
+	flushDuration := time.Duration(500) * time.Millisecond
 
 	statsCli.GaugeDelta("sample.gauge", 42)
 	<-time.After(flushDuration)
@@ -51,10 +51,15 @@ func TestStatsDClient(t *testing.T) {
 	sendCommand("counters", w)
 	logOutput(t, s)
 
-	statsCli.EndTiming("sample.timing", 10)
+	timing(statsCli)
 	<-time.After(flushDuration)
 	sendCommand("timers", w)
 	logOutput(t, s)
+}
+
+func timing(statsCli Client) {
+	defer statsCli.Timing("sample.timing", time.Now())
+	<-time.After(10 * time.Millisecond)
 }
 
 func statsdFlushInterval(s *bufio.Scanner, w *bufio.Writer) time.Duration {

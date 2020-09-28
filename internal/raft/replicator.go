@@ -90,7 +90,7 @@ func (this *replicator) Start() {
 
 func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 	// TODO: Validate raft state to check if Start() has been invoked
-	defer this.statsCli.EndTiming("save.latency.ms", this.statsCli.StartTiming())
+	defer this.statsCli.Timing("save.latency.ms", time.Now())
 	repl_req := &internalNexusRequest{ID: this.idGen.Next(), Req: data}
 	if repl_req_data, err := repl_req.marshal(); err != nil {
 		this.statsCli.Incr("save.marshal.error", 1)
@@ -120,7 +120,7 @@ func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 
 func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 	// TODO: Validate raft state to check if Start() has been invoked
-	defer this.statsCli.EndTiming("load.latency.ms", this.statsCli.StartTiming())
+	defer this.statsCli.Timing("load.latency.ms", time.Now())
 	readReqId := this.idGen.Next()
 	ch := this.waiter.Register(readReqId)
 	child_ctx, cancel := context.WithTimeout(ctx, this.opts.ReplTimeout())
@@ -176,7 +176,7 @@ func (this *replicator) Stop() {
 }
 
 func (this *replicator) proposeConfigChange(ctx context.Context, confChange raftpb.ConfChange) error {
-	defer this.statsCli.EndTiming("config.change.latency.ms", this.statsCli.StartTiming())
+	defer this.statsCli.Timing("config.change.latency.ms", time.Now())
 	confChange.ID = atomic.AddUint64(&this.confChangeCount, 1)
 	ch := this.waiter.Register(confChange.ID)
 	child_ctx, cancel := context.WithTimeout(ctx, this.opts.ReplTimeout())

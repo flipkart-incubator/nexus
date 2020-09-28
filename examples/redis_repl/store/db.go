@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	"github.com/go-redis/redis"
@@ -27,13 +28,13 @@ func isRedisError(err error) bool {
 }
 
 func (this *redisStore) Load(data []byte) ([]byte, error) {
-	defer this.statsCli.EndTiming("redis_load.latency.ms", this.statsCli.StartTiming())
+	defer this.statsCli.Timing("redis_load.latency.ms", time.Now())
 	luaScript := string(data)
 	return this.evalLua(luaScript)
 }
 
 func (this *redisStore) Save(data []byte) ([]byte, error) {
-	defer this.statsCli.EndTiming("redis_save.latency.ms", this.statsCli.StartTiming())
+	defer this.statsCli.Timing("redis_save.latency.ms", time.Now())
 	luaScript := string(data)
 	return this.evalLua(luaScript)
 }
@@ -105,7 +106,7 @@ func (this *redisStore) loadAllData(redis_data_set []map[string][]byte, replacea
 }
 
 func (this *redisStore) Backup() ([]byte, error) {
-	defer this.statsCli.EndTiming("redis_backup.latency.ms", this.statsCli.StartTiming())
+	defer this.statsCli.Timing("redis_backup.latency.ms", time.Now())
 	if data, err := this.extractAllData(); isRedisError(err) {
 		this.statsCli.Incr("backup.extract.error", 1)
 		return nil, err
@@ -120,7 +121,7 @@ func (this *redisStore) Backup() ([]byte, error) {
 }
 
 func (this *redisStore) Restore(data []byte) error {
-	defer this.statsCli.EndTiming("redis_restore.latency.ms", this.statsCli.StartTiming())
+	defer this.statsCli.Timing("redis_restore.latency.ms", time.Now())
 	var redis_data []map[string][]byte
 	buf := bytes.NewBuffer(data)
 	if err := gob.NewDecoder(buf).Decode(&redis_data); err != nil {

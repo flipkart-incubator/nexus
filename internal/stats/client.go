@@ -20,8 +20,7 @@ type Client interface {
 	Incr(string, int64)
 	Gauge(string, int64)
 	GaugeDelta(string, int64)
-	StartTiming() int64
-	EndTiming(string, int64)
+	Timing(string, time.Time)
 }
 
 type noopClient struct{}
@@ -29,8 +28,7 @@ type noopClient struct{}
 func (*noopClient) Incr(_ string, _ int64)       {}
 func (*noopClient) Gauge(_ string, _ int64)      {}
 func (*noopClient) GaugeDelta(_ string, _ int64) {}
-func (*noopClient) StartTiming() int64           { return 0 }
-func (*noopClient) EndTiming(_ string, _ int64)  {}
+func (*noopClient) Timing(_ string, _ time.Time) {}
 func (*noopClient) Close() error                 { return nil }
 
 func NewNoOpClient() *noopClient {
@@ -67,13 +65,8 @@ func (sdc *statsDClient) GaugeDelta(name string, value int64) {
 	sdc.cli.GaugeDelta(name, value)
 }
 
-func (sdc *statsDClient) StartTiming() int64 {
-	return time.Now().UnixNano() / 1e6
-}
-
-func (sdc *statsDClient) EndTiming(name string, startTime int64) {
-	endTime := time.Now().UnixNano() / 1e6
-	sdc.cli.Timing(name, endTime-startTime)
+func (sdc *statsDClient) Timing(name string, startTime time.Time) {
+	sdc.cli.PrecisionTiming(name, time.Since(startTime))
 }
 
 func (sdc *statsDClient) Close() error {
