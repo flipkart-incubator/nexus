@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -31,10 +32,16 @@ func TestReplicator(t *testing.T) {
 	clus = startCluster(t)
 	defer clus.stop()
 
+	t.Run("testListMembers", testListMembers)
 	t.Run("testSaveLoadData", testSaveLoadData)
 	t.Run("testLoadDuringRestarts", testLoadDuringRestarts)
 	t.Run("testForNewNexusNodeJoinLeaveCluster", testForNewNexusNodeJoinLeaveCluster)
 	t.Run("testForNodeRestart", testForNodeRestart)
+}
+
+func testListMembers(t *testing.T) {
+	members := strings.Split(clusterUrl, ",")
+	clus.assertMembers(t, members)
 }
 
 func testSaveLoadData(t *testing.T) {
@@ -124,11 +131,13 @@ func testLoadDuringRestarts(t *testing.T) {
 
 func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 	peer1 := clus.peers[0]
+	clusUrl := fmt.Sprintf("%s,%s", clusterUrl, peer4Url)
+	members := strings.Split(clusterUrl, ",")
 	if err := peer1.repl.AddMember(context.Background(), peer4Id, peer4Url); err != nil {
 		t.Fatal(err)
 	}
 	sleep(3)
-	clusUrl := fmt.Sprintf("%s,%s", clusterUrl, peer4Url)
+	clus.assertMembers(t, members)
 	if peer4, err := newJoiningPeer(peer4Id, clusUrl); err != nil {
 		t.Fatal(err)
 	} else {
@@ -138,9 +147,11 @@ func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 		if !reflect.DeepEqual(db4, db1) {
 			t.Errorf("DB Mismatch !!! Expected: %v, Actual: %v", db4, db1)
 		}
+		peer4.assertMembers(t, members)
 		if err := peer1.repl.RemoveMember(context.Background(), peer4Id); err != nil {
 			t.Fatal(err)
 		}
+		clus.assertMembers(t, members[0:len(members)-1])
 		sleep(3)
 		peer4.stop()
 	}
@@ -222,6 +233,23 @@ func (this *cluster) stop() {
 func (this *cluster) assertDB(t *testing.T, reqs ...*kvReq) {
 	for _, peer := range this.peers {
 		peer.assertDB(t, reqs...)
+	}
+}
+
+func (this *cluster) assertMembers(t *testing.T, members []string) {
+	for _, peer := range this.peers {
+		peer.assertMembers(t, members)
+	}
+}
+
+func (peer *peer) assertMembers(t *testing.T, members []string) {
+	for i, member := range members {
+		peerId := uint64(i + 1)
+		if peerUrl, present := peer.repl.ListMembers()[peerId]; !present {
+			t.Errorf("For peer ID: %v, unable to find member with ID: %v", peer.id, peerId)
+		} else if peerUrl != member {
+			t.Errorf("For peer ID: %v, mismatch of URL for member with ID: %v. Expected: %v, Actual: %v", peer.id, peerId, member, peerUrl)
+		}
 	}
 }
 

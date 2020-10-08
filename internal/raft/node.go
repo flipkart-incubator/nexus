@@ -71,6 +71,7 @@ type raftNode struct {
 	httpdonec  chan struct{} // signals http server shutdown complete
 	readOption raft.ReadOnlyOption
 	statsCli   stats.Client
+	rpeers     map[uint64]string
 }
 
 var defaultSnapshotCount uint64 = 10000
@@ -152,6 +153,7 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 			case raftpb.ConfChangeAddNode:
 				if len(cc.Context) > 0 {
 					rc.transport.AddPeer(types.ID(cc.NodeID), []string{string(cc.Context)})
+					rc.rpeers[cc.NodeID] = string(cc.Context)
 				}
 			case raftpb.ConfChangeRemoveNode:
 				if cc.NodeID == uint64(rc.id) {
@@ -160,6 +162,7 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 					return false
 				}
 				rc.transport.RemovePeer(types.ID(cc.NodeID))
+				delete(rc.rpeers, cc.NodeID)
 			}
 		}
 
@@ -263,9 +266,11 @@ func (rc *raftNode) startRaft() {
 	oldwal := wal.Exist(rc.waldir)
 	rc.wal = rc.replayWAL()
 
+	rc.rpeers = make(map[uint64]string)
 	rpeers := make([]raft.Peer, len(rc.peers))
-	for i := range rpeers {
-		rpeers[i] = raft.Peer{ID: uint64(i + 1)}
+	for i, peer := range rc.peers {
+		rpeers[i] = raft.Peer{ID: uint64(i + 1), Context: []byte(peer)}
+		rc.rpeers[rpeers[i].ID] = peer
 	}
 	c := &raft.Config{
 		ID:              uint64(rc.id),
@@ -298,9 +303,9 @@ func (rc *raftNode) startRaft() {
 	}
 
 	rc.transport.Start()
-	for i := range rc.peers {
+	for i, peer := range rc.peers {
 		if i+1 != rc.id {
-			rc.transport.AddPeer(types.ID(i+1), []string{rc.peers[i]})
+			rc.transport.AddPeer(types.ID(i+1), []string{peer})
 		}
 	}
 

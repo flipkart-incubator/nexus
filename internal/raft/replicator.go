@@ -88,6 +88,10 @@ func (this *replicator) Start() {
 	this.node.startRaft()
 }
 
+func (this *replicator) ListMembers() map[uint64]string {
+	return this.node.rpeers
+}
+
 func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 	// TODO: Validate raft state to check if Start() has been invoked
 	defer this.statsCli.Timing("save.latency.ms", time.Now())
