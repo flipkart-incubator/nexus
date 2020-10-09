@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/flipkart-incubator/nexus/pkg/api"
+	"github.com/golang/protobuf/ptypes/empty"
 	ggrpc "google.golang.org/grpc"
 )
 
@@ -86,7 +87,7 @@ func (this *NexusClient) RemoveNode(nodeId uint32) error {
 func (this *NexusClient) ListNodes() map[uint32]string {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	res, _ := this.nexusCli.ListNodes(ctx, nil)
+	res, _ := this.nexusCli.ListNodes(ctx, &empty.Empty{})
 	return res.Nodes
 }
 
