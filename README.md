@@ -71,15 +71,15 @@ $ <PROJECT_ROOT>/bin/redis_repl \
 
 In a separate terminal session, launch the `repl` utility:
 ```bash
-$ <PROJECT_ROOT>/bin/repl redis 127.0.0.1:9121 save "return redis.call('set', 'hello', 'world')"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis save "return redis.call('set', 'hello', 'world')"
 Response from Redis (without quotes): 'OK'
-$ <PROJECT_ROOT>/bin/repl redis 127.0.0.1:9121 save "return redis.call('incr', 'ctr')"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis save "return redis.call('incr', 'ctr')"
 Response from Redis (without quotes): '1'
-$ <PROJECT_ROOT>/bin/repl redis 127.0.0.1:9121 save "return redis.call('incr', 'ctr')"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis save "return redis.call('incr', 'ctr')"
 Response from Redis (without quotes): '2'
-$ <PROJECT_ROOT>/bin/repl redis 127.0.0.1:9121 load "return redis.call('keys', '*')"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis load "return redis.call('keys', '*')"
 Response from Redis (without quotes): '[ctr hello]'
-$ <PROJECT_ROOT>/bin/repl redis 127.0.0.1:9121 load "return redis.call('get', 'ctr')"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis load "return redis.call('get', 'ctr')"
 Response from Redis (without quotes): '2'
 ```
 
@@ -120,21 +120,56 @@ $ <PROJECT_ROOT>/bin/mysql_repl \
 In a separate terminal session, launch the `repl` utility:
 ```bash
 # Create a sync_table in all the nodes
-$ <PROJECT_ROOT>/bin/repl mysql 127.0.0.1:9121 save "create table sync_table (id INT PRIMARY KEY AUTO_INCREMENT, data VARCHAR(50) NOT NULL, ts timestamp(3) default current_timestamp(3) on update current_timestamp(3));"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 mysql save "create table sync_table (id INT PRIMARY KEY AUTO_INCREMENT, data VARCHAR(50) NOT NULL, ts timestamp(3) default current_timestamp(3) on update current_timestamp(3));"
 
 # Insert some data into this table
-$ <PROJECT_ROOT>/bin/repl mysql 127.0.0.1:9121 save "insert into sync_table (name, data) values ('foo', 'bar');"
-$ <PROJECT_ROOT>/bin/repl mysql 127.0.0.1:9121 save "insert into sync_table (name, data) values ('hello', 'world');"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 mysql save "insert into sync_table (name, data) values ('foo', 'bar');"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 mysql save "insert into sync_table (name, data) values ('hello', 'world');"
 
 # Load some data from this table
-$ <PROJECT_ROOT>/bin/repl mysql 127.0.0.1:9121 load "select * from nexus.sync_table;"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 mysql load "select * from nexus.sync_table;"
 ```
 
 Each of the 3 MySQL instances can now be inspected to ensure the table `sync_table` is created and it
 contains 2 rows in it. Likewise any arbitrary SQL statements can be issued for synchronous replication
 to all the 3 MySQL instances.
 
+### Changing Nexus cluster membership
+
+At runtime, nodes belonging to an existing Nexus cluster can be removed or new nodes added, using the procedure described below.
+
+```bash
+# Add a node with ID 4 and URL http://127.0.0.1:9024
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 addNode 4 "http://127.0.0.1:9024"
+Current cluster members:
+3 => http://127.0.0.1:9023
+4 => http://127.0.0.1:9024
+1 => http://127.0.0.1:9021
+2 => http://127.0.0.1:9022
+# Now launch this node
+$ <PROJECT_ROOT>/bin/redis_repl \
+      -grpcPort 9124 \
+      -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023,http://127.0.0.1:9024" \
+      -nexusNodeId 4 \
+      -redisPort 6382 \
+      -nexusJoin
+```
+
+The first command makes the cluster aware of the new node, with ID 4, that is about to join the cluster. While the second command launches this new node. Note that the `-nexusJoin` flag must be used along with including this node's URL in the `-nexusClusterUrl` parameter.
+
+Alternatively, nodes can be removed from an existing Nexus cluster. It does not matter even if the node about to be removed happens to be the leader of the cluster during that time. In such a case, the node removal is automatically followed by a leader election.
+
+```bash
+# Remove node with ID 2
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 removeNode 2
+Current cluster members:
+1 => http://127.0.0.1:9021
+3 => http://127.0.0.1:9023
+4 => http://127.0.0.1:9024
+```
+
 ### Reads based on leader leases
+
 By default, reads performed over Nexus perform a round trip with all the replicas and results are returned based on the quorum. This is done to provide linearizable guarantees. However, if the performance cost of this round trip during read time is undesirable, the flag `-nexusLeaseBasedReads` can be used to avoid it and instead return the local copy so long as the lease is active on the serving node. Periodically messages are exchanged with other replicas so as to ensure the current lease is still active.
 
 Note that in environments where there can be unbounded clock drifts, this lease based approach can return stale results (non-linearizable) when the lease holder assumes its lease validity longer than it should, based on its local clock.
