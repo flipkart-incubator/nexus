@@ -161,8 +161,12 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 					// TODO: In this case, check if its OK to not publish to rc.commitC
 					return false
 				}
-				rc.transport.RemovePeer(types.ID(cc.NodeID))
-				delete(rc.rpeers, cc.NodeID)
+				if _, ok := rc.rpeers[cc.NodeID]; !ok {
+					log.Printf("[Node %v] WARNING Ignoring request to remove non-existing Node with ID: %v from the cluster.", rc.id, cc.NodeID)
+				} else {
+					rc.transport.RemovePeer(types.ID(cc.NodeID))
+					delete(rc.rpeers, cc.NodeID)
+				}
 			}
 		}
 
