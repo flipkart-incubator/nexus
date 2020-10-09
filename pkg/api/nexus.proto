@@ -2,6 +2,8 @@ syntax = "proto3";
 package nexus.api;
 option go_package = "api";
 
+import "google/protobuf/empty.proto";
+
 message Status {
   int32 code = 1;
   string message = 2;
@@ -36,9 +38,15 @@ message RemoveNodeRequest {
   uint32 nodeId = 1;
 }
 
+message ListNodesResponse {
+  Status status = 1;
+  map<uint32, string> nodes = 2;
+}
+
 service Nexus {
   rpc Save (SaveRequest) returns (SaveResponse);
   rpc Load (LoadRequest) returns (LoadResponse);
   rpc AddNode (AddNodeRequest) returns (Status);
   rpc RemoveNode (RemoveNodeRequest) returns (Status);
+  rpc ListNodes (google.protobuf.Empty) returns (ListNodesResponse);
 }

@@ -83,6 +83,13 @@ func (this *NexusClient) RemoveNode(nodeId uint32) error {
 	return nil
 }
 
+func (this *NexusClient) ListNodes() map[uint32]string {
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	defer cancel()
+	res, _ := this.nexusCli.ListNodes(ctx, nil)
+	return res.Nodes
+}
+
 func (this *NexusClient) Close() error {
 	return this.cliConn.Close()
 }

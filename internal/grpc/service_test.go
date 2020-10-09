@@ -82,6 +82,10 @@ func (this *mockRepl) RemoveMember(ctx context.Context, nodeId int) error {
 	return errors.New("mockRepl::RemoveMember not implemented")
 }
 
+func (this *mockRepl) ListMembers() map[uint32]string {
+	return nil
+}
+
 func (this *mockRepl) hasData(data []byte) bool {
 	code, _ := hashCode(data)
 	_, present := this.data[code]

@@ -7,6 +7,7 @@ import (
 	"net"
 
 	"github.com/flipkart-incubator/nexus/pkg/api"
+	"github.com/golang/protobuf/ptypes/empty"
 	ggrpc "google.golang.org/grpc"
 )
 
@@ -72,4 +73,8 @@ func (this *NexusService) RemoveNode(ctx context.Context, req *api.RemoveNodeReq
 		return &api.Status{Code: -1, Message: err.Error()}, err
 	}
 	return &api.Status{}, nil
+}
+
+func (this *NexusService) ListNodes(ctx context.Context, _ *empty.Empty) (*api.ListNodesResponse, error) {
+	return &api.ListNodesResponse{Status: &api.Status{}, Nodes: this.repl.ListMembers()}, nil
 }

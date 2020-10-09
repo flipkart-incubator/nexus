@@ -88,8 +88,13 @@ func (this *replicator) Start() {
 	this.node.startRaft()
 }
 
-func (this *replicator) ListMembers() map[uint64]string {
-	return this.node.rpeers
+func (this *replicator) ListMembers() map[uint32]string {
+	peers := this.node.rpeers
+	members := make(map[uint32]string, len(peers))
+	for id, peer := range peers {
+		members[uint32(id)] = peer
+	}
+	return members
 }
 
 func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {

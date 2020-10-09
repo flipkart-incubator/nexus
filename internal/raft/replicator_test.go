@@ -244,7 +244,7 @@ func (this *cluster) assertMembers(t *testing.T, members []string) {
 
 func (peer *peer) assertMembers(t *testing.T, members []string) {
 	for i, member := range members {
-		peerId := uint64(i + 1)
+		peerId := uint32(i + 1)
 		if peerUrl, present := peer.repl.ListMembers()[peerId]; !present {
 			t.Errorf("For peer ID: %v, unable to find member with ID: %v", peer.id, peerId)
 		} else if peerUrl != member {
