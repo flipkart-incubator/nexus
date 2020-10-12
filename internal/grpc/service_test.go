@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"hash/fnv"
 	"testing"
+
+	"github.com/flipkart-incubator/nexus/pkg/api"
 )
 
 const (
@@ -26,11 +28,19 @@ func TestNexusService(t *testing.T) {
 		t.Fatal(err)
 	} else {
 		defer nc.Close()
+		checkHealth(t, nc)
 		for i := 1; i <= numCases; i++ {
 			data := []byte(fmt.Sprintf("test_%d", i))
 			replicate(t, nc, data)
 			assertRepl(t, repl, data)
 		}
+	}
+}
+
+func checkHealth(t *testing.T, nc *NexusClient) {
+	res := nc.HealthCheck()
+	if res != api.HealthCheckResponse_SERVING {
+		t.Fatalf("Bad health of Nexus GRPC service. Status: %s", res.String())
 	}
 }
 

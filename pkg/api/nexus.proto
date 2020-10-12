@@ -43,7 +43,21 @@ message ListNodesResponse {
   map<uint32, string> nodes = 2;
 }
 
+message HealthCheckRequest {
+  string service = 1;
+}
+
+message HealthCheckResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+  }
+  ServingStatus status = 1;
+}
+
 service Nexus {
+  rpc Check (HealthCheckRequest) returns (HealthCheckResponse);
   rpc Save (SaveRequest) returns (SaveResponse);
   rpc Load (LoadRequest) returns (LoadResponse);
   rpc AddNode (AddNodeRequest) returns (Status);

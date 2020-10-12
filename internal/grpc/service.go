@@ -45,6 +45,10 @@ func (this *NexusService) Close() error {
 	return nil
 }
 
+func (this *NexusService) Check(ctx context.Context, req *api.HealthCheckRequest) (*api.HealthCheckResponse, error) {
+	return &api.HealthCheckResponse{Status: api.HealthCheckResponse_SERVING}, nil
+}
+
 func (this *NexusService) Save(ctx context.Context, req *api.SaveRequest) (*api.SaveResponse, error) {
 	if res, err := this.repl.Save(ctx, req.Data); err != nil {
 		return &api.SaveResponse{Status: &api.Status{Code: -1, Message: err.Error()}, ReqData: req.Data}, err

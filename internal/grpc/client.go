@@ -30,6 +30,17 @@ func NewInSecureNexusClient(svcAddr string) (*NexusClient, error) {
 	}
 }
 
+func (this *NexusClient) HealthCheck() api.HealthCheckResponse_ServingStatus {
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	defer cancel()
+	req := &api.HealthCheckRequest{Service: ""}
+	if res, err := this.nexusCli.Check(ctx, req); err != nil {
+		return api.HealthCheckResponse_NOT_SERVING
+	} else {
+		return res.Status
+	}
+}
+
 func (this *NexusClient) Save(data []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
