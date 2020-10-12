@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/gob"
+	"fmt"
 	"log"
 	"strconv"
 	"sync/atomic"
@@ -89,10 +90,15 @@ func (this *replicator) Start() {
 }
 
 func (this *replicator) ListMembers() map[uint32]string {
+	lead := this.node.getLeaderId()
 	peers := this.node.rpeers
 	members := make(map[uint32]string, len(peers))
 	for id, peer := range peers {
-		members[uint32(id)] = peer
+		if id == lead {
+			members[uint32(id)] = fmt.Sprintf("%s (leader)", peer)
+		} else {
+			members[uint32(id)] = peer
+		}
 	}
 	return members
 }

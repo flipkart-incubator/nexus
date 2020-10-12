@@ -139,6 +139,10 @@ func (rc *raftNode) entriesToApply(ents []raftpb.Entry) (nents []raftpb.Entry) {
 	return nents
 }
 
+func (rc *raftNode) getLeaderId() uint64 {
+	return rc.node.Status().SoftState.Lead
+}
+
 // publishEntries writes committed log entries to commit channel and returns
 // whether all entries could be published.
 func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {

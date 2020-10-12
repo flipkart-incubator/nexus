@@ -243,12 +243,23 @@ func (this *cluster) assertMembers(t *testing.T, members []string) {
 }
 
 func (peer *peer) assertMembers(t *testing.T, members []string) {
+	lead := peer.repl.node.getLeaderId()
+	clusNodes := peer.repl.ListMembers()
 	for i, member := range members {
 		peerId := uint32(i + 1)
-		if peerUrl, present := peer.repl.ListMembers()[peerId]; !present {
+		if peerUrl, present := clusNodes[peerId]; !present {
 			t.Errorf("For peer ID: %v, unable to find member with ID: %v", peer.id, peerId)
-		} else if peerUrl != member {
-			t.Errorf("For peer ID: %v, mismatch of URL for member with ID: %v. Expected: %v, Actual: %v", peer.id, peerId, member, peerUrl)
+		} else {
+			if peerId == uint32(lead) {
+				if idx := strings.Index(peerUrl, "(leader)"); idx <= 0 {
+					t.Errorf("For peer ID: %v, expected the string 'leader' to be present inside the leader's URL: %s", peer.id, peerUrl)
+				} else {
+					peerUrl = peerUrl[0 : idx-1] // account for space before leader tag
+				}
+			}
+			if peerUrl != member {
+				t.Errorf("For peer ID: %v, mismatch of URL for member with ID: %v. Expected: %v, Actual: %v", peer.id, peerId, member, peerUrl)
+			}
 		}
 	}
 }
