@@ -311,9 +311,9 @@ func (rc *raftNode) startRaft() {
 	}
 
 	rc.transport.Start()
-	for i, peer := range rc.peers {
-		if i+1 != rc.id {
-			rc.transport.AddPeer(types.ID(i+1), []string{peer})
+	for i, peer := range rc.rpeers {
+		if i != uint64(rc.id) {
+			rc.transport.AddPeer(types.ID(i), []string{peer})
 		}
 	}
 
@@ -451,7 +451,7 @@ func (rc *raftNode) serveChannels() {
 }
 
 func (rc *raftNode) serveRaft() {
-	url, err := url.Parse(rc.peers[rc.id-1])
+	url, err := url.Parse(rc.rpeers[uint64(rc.id)])
 	if err != nil {
 		log.Fatalf("nexus.raft: [Node %v] Failed parsing URL (%v)", rc.id, err)
 	}
