@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -21,7 +22,6 @@ const (
 	logDir      = "/tmp/nexus_test/logs"
 	snapDir     = "/tmp/nexus_test/snap"
 	clusterUrl  = "http://127.0.0.1:9321,http://127.0.0.1:9322,http://127.0.0.1:9323"
-	peer4Id     = 4
 	peer4Url    = "http://127.0.0.1:9324"
 	replTimeout = 3 * time.Second
 )
@@ -103,7 +103,7 @@ func testLoadDuringRestarts(t *testing.T) {
 
 	// start peer3
 	var err error
-	peer3, err = newPeerWithDB(peer3.id, peer3.db)
+	peer3, err = newPeerWithDB(2, peer3.db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,29 +130,41 @@ func testLoadDuringRestarts(t *testing.T) {
 }
 
 func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
-	peer1 := clus.peers[0]
-	clusUrl := fmt.Sprintf("%s,%s", clusterUrl, peer4Url)
-	members := strings.Split(clusterUrl, ",")
-	if err := peer1.repl.AddMember(context.Background(), peer4Id, peer4Url); err != nil {
-		t.Fatal(err)
-	}
-	sleep(3)
-	clus.assertMembers(t, members)
-	if peer4, err := newJoiningPeer(peer4Id, clusUrl); err != nil {
+	// create a new peer
+	if peer4, err := newJoiningPeer(peer4Url); err != nil {
 		t.Fatal(err)
 	} else {
+		// start the peer
 		peer4.start()
 		sleep(3)
+		peer1 := clus.peers[0]
+
+		// add peer to existing cluster
+		if err := peer1.repl.AddMember(context.Background(), peer4Url); err != nil {
+			t.Fatal(err)
+		}
+		sleep(3)
+		members := strings.Split(clusterUrl, ",")
+		members = append(members, peer4Url)
+		clus.assertMembers(t, members)
+
+		// insert data
 		db4, db1 := peer4.db.content, peer1.db.content
 		if !reflect.DeepEqual(db4, db1) {
 			t.Errorf("DB Mismatch !!! Expected: %v, Actual: %v", db4, db1)
 		}
-		peer4.assertMembers(t, members)
-		if err := peer1.repl.RemoveMember(context.Background(), peer4Id); err != nil {
+
+		// assert membership across all nodes
+		peer4.assertMembers(t, peer4.getLeaderUrl(), members)
+
+		// remove this peer
+		if err := peer1.repl.RemoveMember(context.Background(), peer4Url); err != nil {
 			t.Fatal(err)
 		}
-		clus.assertMembers(t, members[0:len(members)-1])
 		sleep(3)
+
+		// assert membership across all nodes
+		clus.assertMembers(t, members[0:len(members)-1])
 		peer4.stop()
 	}
 }
@@ -173,7 +185,7 @@ func testForNodeRestart(t *testing.T) {
 	peer1.save(t, new_reqs[1])
 
 	var err error
-	peer2, err = newPeerWithDB(2, peer2.db)
+	peer2, err = newPeerWithDB(1, peer2.db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,11 +219,11 @@ func newCluster(size int) (*cluster, error) {
 	}
 
 	peers := make([]*peer, size)
-	for i := 1; i <= size; i++ {
+	for i := 0; i < size; i++ {
 		if peer, err := newPeer(i); err != nil {
 			return nil, err
 		} else {
-			peers[i-1] = peer
+			peers[i] = peer
 		}
 	}
 	return &cluster{peers}, nil
@@ -237,42 +249,41 @@ func (this *cluster) assertDB(t *testing.T, reqs ...*kvReq) {
 }
 
 func (this *cluster) assertMembers(t *testing.T, members []string) {
+	lead := this.peers[0].getLeaderUrl()
 	for _, peer := range this.peers {
-		peer.assertMembers(t, members)
+		peer.assertMembers(t, lead, members)
 	}
 }
 
-func (peer *peer) assertMembers(t *testing.T, members []string) {
-	lead := peer.repl.node.getLeaderId()
+func (peer *peer) assertMembers(t *testing.T, leader string, members []string) {
 	clusNodes := peer.repl.ListMembers()
-	for i, member := range members {
-		peerId := uint32(i + 1)
-		if peerUrl, present := clusNodes[peerId]; !present {
-			t.Errorf("For peer ID: %v, unable to find member with ID: %v", peer.id, peerId)
-		} else {
-			if peerId == uint32(lead) {
-				if idx := strings.Index(peerUrl, "(leader)"); idx <= 0 {
-					t.Errorf("For peer ID: %v, expected the string 'leader' to be present inside the leader's URL: %s", peer.id, peerUrl)
-				} else {
-					peerUrl = peerUrl[0 : idx-1] // account for space before leader tag
-				}
-			}
-			if peerUrl != member {
-				t.Errorf("For peer ID: %v, mismatch of URL for member with ID: %v. Expected: %v, Actual: %v", peer.id, peerId, member, peerUrl)
+	var clusMembers []string
+	for _, clusNode := range clusNodes {
+		if idx := strings.Index(clusNode, " (leader)"); idx > 0 {
+			clusNode = clusNode[:idx]
+			if clusNode != leader {
+				t.Errorf("For peer ID: %v, mismatch of URL for leader. Expected: '%v', Actual: '%v'", peer.id, leader, clusNode)
 			}
 		}
+		clusMembers = append(clusMembers, clusNode)
+	}
+	sort.Strings(clusMembers)
+	sort.Strings(members)
+	if !reflect.DeepEqual(clusMembers, members) {
+		t.Errorf("For peer ID: %v, mismatch of members. Expected: %v, Actual: %v", peer.id, members, clusMembers)
 	}
 }
 
 type peer struct {
-	id   int
+	id   uint64
 	db   *inMemKVStore
 	repl *replicator
 }
 
 func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
+	peerAddr := strings.Split(clusterUrl, ",")[id]
 	opts, err := raft.NewOptions(
-		raft.NodeId(id),
+		raft.ListenAddr(peerAddr),
 		raft.LogDir(logDir),
 		raft.SnapDir(snapDir),
 		raft.ClusterUrl(clusterUrl),
@@ -283,7 +294,7 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 		return nil, err
 	} else {
 		repl := NewReplicator(db, opts)
-		return &peer{id, db, repl}, nil
+		return &peer{repl.node.id, db, repl}, nil
 	}
 }
 
@@ -292,23 +303,27 @@ func newPeer(id int) (*peer, error) {
 	return newPeerWithDB(id, db)
 }
 
-func newJoiningPeer(id int, clusUrl string) (*peer, error) {
+func newJoiningPeer(peerAddr string) (*peer, error) {
 	opts, err := raft.NewOptions(
-		raft.NodeId(id),
+		raft.ListenAddr(peerAddr),
 		raft.LogDir(logDir),
 		raft.SnapDir(snapDir),
-		raft.ClusterUrl(clusUrl),
+		raft.ClusterUrl(clusterUrl),
 		raft.ReplicationTimeout(replTimeout),
 		raft.LeaseBasedReads(false),
-		raft.Join(true), // `true` since this node is joining an existing cluster
 	)
 	if err != nil {
 		return nil, err
 	} else {
 		db := newInMemKVStore()
 		repl := NewReplicator(db, opts)
-		return &peer{id, db, repl}, nil
+		return &peer{repl.node.id, db, repl}, nil
 	}
+}
+
+func (this *peer) getLeaderUrl() string {
+	lid := this.repl.node.getLeaderId()
+	return this.repl.node.rpeers[lid]
 }
 
 func (this *peer) start() {

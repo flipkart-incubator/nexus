@@ -1,6 +1,8 @@
 package raft
 
 import (
+	"crypto/sha1"
+	"encoding/binary"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,19 +15,19 @@ import (
 type Option func(*options) error
 
 type Options interface {
-	NodeId() int
+	NodeId() uint64
+	ListenAddr() string
 	Join() bool
 	LogDir() string
 	SnapDir() string
-	ClusterUrls() []string
+	ClusterUrls() map[uint64]string
 	ReplTimeout() time.Duration
 	ReadOption() raft.ReadOnlyOption
 	StatsDAddr() string
 }
 
 type options struct {
-	nodeId          int
-	join            bool
+	listenAddr      string
 	logDir          string
 	snapDir         string
 	clusterUrl      string
@@ -40,8 +42,7 @@ var (
 )
 
 func init() {
-	flag.IntVar(&opts.nodeId, "nexusNodeId", -1, "Node ID (> 0) of the current node")
-	flag.BoolVar(&opts.join, "nexusJoin", false, "Join an existing Nexus cluster (default false)")
+	flag.StringVar(&opts.listenAddr, "nexusListenAddr", "", "Address on which Nexus service binds")
 	flag.StringVar(&opts.logDir, "nexusLogDir", "/tmp/logs", "Dir for storing RAFT logs")
 	flag.StringVar(&opts.snapDir, "nexusSnapDir", "/tmp/snap", "Dir for storing RAFT snapshots")
 	flag.StringVar(&opts.clusterUrl, "nexusClusterUrl", "", "Comma separated list of Nexus URLs")
@@ -52,8 +53,7 @@ func init() {
 
 func OptionsFromFlags() []Option {
 	return []Option{
-		NodeId(opts.nodeId),
-		Join(opts.join),
+		ListenAddr(opts.listenAddr),
 		LogDir(opts.logDir),
 		SnapDir(opts.snapDir),
 		ClusterUrl(opts.clusterUrl),
@@ -73,24 +73,45 @@ func NewOptions(opts ...Option) (Options, error) {
 	return options, nil
 }
 
-func (this *options) NodeId() int {
-	return this.nodeId
+func (this *options) NodeId() uint64 {
+	return this.nodeId(this.listenAddr)
+}
+
+func (this *options) nodeId(addr string) uint64 {
+	hash := sha1.Sum([]byte(addr))
+	return binary.BigEndian.Uint64(hash[:8])
+}
+
+func (this *options) ListenAddr() string {
+	return this.listenAddr
 }
 
 func (this *options) Join() bool {
-	return this.join
+	clusUrls := this.ClusterUrls()
+	for _, clusUrl := range clusUrls {
+		if strings.TrimSpace(clusUrl) == this.listenAddr {
+			return false
+		}
+	}
+	return true
 }
 
 func (this *options) LogDir() string {
-	return fmt.Sprintf("%s/node_%d", this.logDir, this.nodeId)
+	return fmt.Sprintf("%s/node_%d", this.logDir, this.NodeId())
 }
 
 func (this *options) SnapDir() string {
-	return fmt.Sprintf("%s/node_%d", this.snapDir, this.nodeId)
+	return fmt.Sprintf("%s/node_%d", this.snapDir, this.NodeId())
 }
 
-func (this *options) ClusterUrls() []string {
-	return strings.Split(this.clusterUrl, ",")
+func (this *options) ClusterUrls() map[uint64]string {
+	nodes := strings.Split(this.clusterUrl, ",")
+	res := make(map[uint64]string, len(nodes))
+	for _, node := range nodes {
+		id := this.nodeId(node)
+		res[id] = node
+	}
+	return res
 }
 
 func (this *options) StatsDAddr() string {
@@ -108,26 +129,21 @@ func (this *options) ReadOption() raft.ReadOnlyOption {
 	return raft.ReadOnlySafe
 }
 
-func NodeId(id int) Option {
+func ListenAddr(addr string) Option {
 	return func(opts *options) error {
-		if id <= 0 {
-			return errors.New("NodeID must be strictly greater than 0")
+		addr = strings.TrimSpace(addr)
+		if addr == "" {
+			return errors.New("Nexus listen address must be given")
 		}
-		opts.nodeId = id
-		return nil
-	}
-}
-
-func Join(join bool) Option {
-	return func(opts *options) error {
-		opts.join = join
+		opts.listenAddr = addr
 		return nil
 	}
 }
 
 func LogDir(dir string) Option {
 	return func(opts *options) error {
-		if dir == "" || strings.TrimSpace(dir) == "" {
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
 			return errors.New("Raft log dir must not be empty")
 		}
 		opts.logDir = dir
@@ -137,7 +153,8 @@ func LogDir(dir string) Option {
 
 func SnapDir(dir string) Option {
 	return func(opts *options) error {
-		if dir == "" || strings.TrimSpace(dir) == "" {
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
 			return errors.New("Raft snapshot dir must not be empty")
 		}
 		opts.snapDir = dir
@@ -147,7 +164,8 @@ func SnapDir(dir string) Option {
 
 func ClusterUrl(url string) Option {
 	return func(opts *options) error {
-		if url == "" || strings.TrimSpace(url) == "" {
+		url = strings.TrimSpace(url)
+		if url == "" {
 			return errors.New("Raft cluster url must not be empty")
 		}
 		opts.clusterUrl = url

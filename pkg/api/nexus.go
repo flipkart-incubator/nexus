@@ -13,9 +13,9 @@ type RaftReplicator interface {
 	Start()
 	Save(context.Context, []byte) ([]byte, error)
 	Load(context.Context, []byte) ([]byte, error)
-	AddMember(context.Context, int, string) error
-	RemoveMember(context.Context, int) error
-	ListMembers() map[uint32]string
+	AddMember(context.Context, string) error
+	RemoveMember(context.Context, string) error
+	ListMembers() map[uint64]string
 	Stop()
 }
 

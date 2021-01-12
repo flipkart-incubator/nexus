@@ -7,7 +7,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"log"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -56,13 +55,13 @@ type replicator struct {
 
 const (
 	MetricPrefix     = "nexus."
-	NodeIdDefaultTag = "nodeId"
+	NodeIdDefaultTag = "nexusNode"
 )
 
 func initStatsD(opts pkg_raft.Options) stats.Client {
 	if statsdAddr := opts.StatsDAddr(); statsdAddr != "" {
 		return stats.NewStatsDClient(statsdAddr, MetricPrefix,
-			stats.NewTag(NodeIdDefaultTag, strconv.Itoa(opts.NodeId())))
+			stats.NewTag(NodeIdDefaultTag, opts.ListenAddr()))
 	}
 	return stats.NewNoOpClient()
 }
@@ -76,7 +75,7 @@ func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
 		confChangeCount: uint64(0),
 		waiter:          wait.New(),
 		applyWait:       wait.NewTimeList(),
-		idGen:           idutil.NewGenerator(uint16(options.NodeId()), time.Now()),
+		idGen:           idutil.NewGenerator(uint16(raftNode.id), time.Now()),
 		statsCli:        statsCli,
 		opts:            options,
 	}
@@ -89,15 +88,15 @@ func (this *replicator) Start() {
 	this.node.startRaft()
 }
 
-func (this *replicator) ListMembers() map[uint32]string {
+func (this *replicator) ListMembers() map[uint64]string {
 	lead := this.node.getLeaderId()
 	peers := this.node.rpeers
-	members := make(map[uint32]string, len(peers))
+	members := make(map[uint64]string, len(peers))
 	for id, peer := range peers {
 		if id == lead {
-			members[uint32(id)] = fmt.Sprintf("%s (leader)", peer)
+			members[id] = fmt.Sprintf("%s (leader)", peer)
 		} else {
-			members[uint32(id)] = peer
+			members[id] = peer
 		}
 	}
 	return members
@@ -115,7 +114,7 @@ func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 		child_ctx, cancel := context.WithTimeout(ctx, this.opts.ReplTimeout())
 		defer cancel()
 		if err := this.node.node.Propose(child_ctx, repl_req_data); err != nil {
-			log.Printf("[WARN] [Node %v] Error while proposing to Raft. Message: %v.", this.node.id, err)
+			log.Printf("[WARN] [Node %x] Error while proposing to Raft. Message: %v.", this.node.id, err)
 			this.waiter.Trigger(repl_req.ID, &internalNexusResponse{Err: err})
 			this.statsCli.Incr("raft.propose.error", 1)
 			return nil, err
@@ -143,7 +142,7 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 	idData := make([]byte, 8)
 	binary.BigEndian.PutUint64(idData, readReqId)
 	if err := this.node.node.ReadIndex(child_ctx, idData); err != nil {
-		log.Printf("[WARN] [Node %v] Error while reading index in Raft. Message: %v.", this.node.id, err)
+		log.Printf("[WARN] [Node %x] Error while reading index in Raft. Message: %v.", this.node.id, err)
 		this.waiter.Trigger(readReqId, &internalNexusResponse{Err: err})
 		return nil, err
 	}
@@ -155,7 +154,7 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 		} else {
 			index := binary.BigEndian.Uint64(inr.Res)
 			if ai := this.node.appliedIndex; ai < index {
-				log.Printf("[WARN] [Node %v] Waiting for read index to be applied. ReadIndex: %d, AppliedIndex: %d", this.node.id, index, ai)
+				log.Printf("[WARN] [Node %x] Waiting for read index to be applied. ReadIndex: %d, AppliedIndex: %d", this.node.id, index, ai)
 				// wait for applied index to catchup
 				select {
 				case <-this.applyWait.Wait(index):
@@ -174,13 +173,25 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 	}
 }
 
-func (this *replicator) AddMember(ctx context.Context, nodeId int, nodeUrl string) error {
-	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: uint64(nodeId), Context: []byte(nodeUrl)}
+func (this *replicator) AddMember(ctx context.Context, nodeUrl string) error {
+	nodeOpts, err := pkg_raft.NewOptions(pkg_raft.ListenAddr(nodeUrl))
+	if err != nil {
+		return err
+	}
+	cc := raftpb.ConfChange{
+		Type:    raftpb.ConfChangeAddNode,
+		NodeID:  nodeOpts.NodeId(),
+		Context: []byte(nodeOpts.ListenAddr()),
+	}
 	return this.proposeConfigChange(ctx, cc)
 }
 
-func (this *replicator) RemoveMember(ctx context.Context, nodeId int) error {
-	cc := raftpb.ConfChange{Type: raftpb.ConfChangeRemoveNode, NodeID: uint64(nodeId)}
+func (this *replicator) RemoveMember(ctx context.Context, nodeUrl string) error {
+	nodeOpts, err := pkg_raft.NewOptions(pkg_raft.ListenAddr(nodeUrl))
+	if err != nil {
+		return err
+	}
+	cc := raftpb.ConfChange{Type: raftpb.ConfChangeRemoveNode, NodeID: nodeOpts.NodeId()}
 	return this.proposeConfigChange(ctx, cc)
 }
 
@@ -197,7 +208,7 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 	child_ctx, cancel := context.WithTimeout(ctx, this.opts.ReplTimeout())
 	defer cancel()
 	if err := this.node.node.ProposeConfChange(ctx, confChange); err != nil {
-		log.Printf("[WARN] [Node %v] Error while proposing config change to Raft. Message: %v.", this.node.id, err)
+		log.Printf("[WARN] [Node %x] Error while proposing config change to Raft. Message: %v.", this.node.id, err)
 		this.waiter.Trigger(confChange.ID, &internalNexusResponse{Err: err})
 		return err
 	}
@@ -219,16 +230,16 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 func (this *replicator) readCommits() {
 	for entry := range this.node.commitC {
 		if entry == nil {
-			log.Printf("[Node %v] Received a message in the commit channel with no data", this.node.id)
+			log.Printf("[Node %x] Received a message in the commit channel with no data", this.node.id)
 			snapshot, err := this.node.snapshotter.Load()
 			if err == snap.ErrNoSnapshot {
-				log.Printf("[Node %v] WARNING - Received no snapshot error", this.node.id)
+				log.Printf("[Node %x] WARNING - Received no snapshot error", this.node.id)
 				continue
 			}
 			if err != nil {
 				log.Panic(err)
 			}
-			log.Printf("[Node %v] Loading snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
+			log.Printf("[Node %x] Loading snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
 			if err := this.store.Restore(snapshot.Data); err != nil {
 				log.Panic(err)
 			}

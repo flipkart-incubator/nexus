@@ -84,15 +84,15 @@ func (this *mockRepl) Save(ctx context.Context, data []byte) ([]byte, error) {
 	}
 }
 
-func (this *mockRepl) AddMember(ctx context.Context, nodeId int, nodeUrl string) error {
+func (this *mockRepl) AddMember(ctx context.Context, nodeUrl string) error {
 	return errors.New("mockRepl::AddMember not implemented")
 }
 
-func (this *mockRepl) RemoveMember(ctx context.Context, nodeId int) error {
+func (this *mockRepl) RemoveMember(ctx context.Context, nodeUrl string) error {
 	return errors.New("mockRepl::RemoveMember not implemented")
 }
 
-func (this *mockRepl) ListMembers() map[uint32]string {
+func (this *mockRepl) ListMembers() map[uint64]string {
 	return nil
 }
 

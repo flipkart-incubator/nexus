@@ -30,17 +30,16 @@ message LoadResponse {
 }
 
 message AddNodeRequest {
-  uint32 nodeId = 1;
-  string nodeUrl = 2;
+  string nodeUrl = 1;
 }
 
 message RemoveNodeRequest {
-  uint32 nodeId = 1;
+  string nodeUrl = 1;
 }
 
 message ListNodesResponse {
   Status status = 1;
-  map<uint32, string> nodes = 2;
+  map<uint64, string> nodes = 2;
 }
 
 message HealthCheckRequest {

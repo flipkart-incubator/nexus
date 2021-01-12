@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
+	"sort"
 	"strings"
 	str "strings"
 
@@ -16,8 +16,8 @@ func printUsage() {
 	fmt.Printf("Usage: %s <nexus_url> <command> [<options>]\n"+
 		"Following commands are supported:\n"+
 		"listNodes\n"+
-		"addNode <nodeId> <nodeAddr>\n"+
-		"removeNode <nodeId>\n"+
+		"addNode <nodeAddr>\n"+
+		"removeNode <nodeAddr>\n"+
 		"<mysql|redis> load <expression>\n"+
 		"<mysql|redis> save <expression>\n", os.Args[0])
 }
@@ -101,27 +101,28 @@ func listNodes(nexus_url string) {
 
 func listNodesUsingCli(nc *grpc.NexusClient) {
 	fmt.Println("Current cluster members:")
-	for nodeId, nodeUrl := range nc.ListNodes() {
-		fmt.Printf("%d => %s\n", nodeId, nodeUrl)
+	members := nc.ListNodes()
+	var ids []uint64
+	for id := range members {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	for _, id := range ids {
+		fmt.Printf("%x => %s\n", id, members[id])
 	}
 }
 
 func addNode(nexus_url string, args []string) {
-	if len(args) < 2 {
-		fmt.Println("Error: Both <nodeId> and <nodeAddr> must be provided")
+	if len(args) < 1 {
+		fmt.Println("Error: <nodeAddr> must be provided")
 		printUsage()
 		return
 	}
-	node_id, node_addr := strings.TrimSpace(args[0]), strings.TrimSpace(args[1])
-	nodeId, err := strconv.ParseUint(node_id, 10, 32)
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
+	node_addr := strings.TrimSpace(args[0])
 	nc := newNexusClient(nexus_url)
 	defer nc.Close()
 
-	err = nc.AddNode(uint32(nodeId), node_addr)
+	err := nc.AddNode(node_addr)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
@@ -130,20 +131,15 @@ func addNode(nexus_url string, args []string) {
 
 func removeNode(nexus_url string, args []string) {
 	if len(args) < 1 {
-		fmt.Println("Error: Missing <nodeId>")
+		fmt.Println("Error: <nodeAddr> must be provided")
 		printUsage()
 		return
 	}
-	node_id := strings.TrimSpace(args[0])
-	nodeId, err := strconv.ParseUint(node_id, 10, 32)
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
+	nodeUrl := strings.TrimSpace(args[0])
 	nc := newNexusClient(nexus_url)
 	defer nc.Close()
 
-	err = nc.RemoveNode(uint32(nodeId))
+	err := nc.RemoveNode(nodeUrl)
 	if err != nil {
 		fmt.Println(err.Error())
 	}

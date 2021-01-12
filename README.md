@@ -55,17 +55,17 @@ Launch the following 3 commands in separate terminal sessions:
 $ <PROJECT_ROOT>/bin/redis_repl \
       -grpcPort 9121 \
       -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusNodeId 1 \
+      -nexusListenAddr "http://127.0.0.1:9021" \
       -redisPort 6379
 $ <PROJECT_ROOT>/bin/redis_repl \
       -grpcPort 9122 \
       -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusNodeId 2 \
+      -nexusListenAddr "http://127.0.0.1:9022" \
       -redisPort 6380
 $ <PROJECT_ROOT>/bin/redis_repl \
       -grpcPort 9123 \
       -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusNodeId 3 \
+      -nexusListenAddr "http://127.0.0.1:9023" \
       -redisPort 6381
 ```
 
@@ -103,17 +103,17 @@ Launch the following 3 commands in separate terminal sessions:
 $ <PROJECT_ROOT>/bin/mysql_repl \
       -grpcPort=9121 \
       -nexusClusterUrl="http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusNodeId=1 \
+      -nexusListenAddr="http://127.0.0.1:9021" \
       -mysqlConnUrl "root:root@tcp(127.0.0.1:33061)/nexus?autocommit=false"
 $ <PROJECT_ROOT>/bin/mysql_repl \
       -grpcPort=9122 \
       -nexusClusterUrl="http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusNodeId=2 \
+      -nexusListenAddr="http://127.0.0.1:9022" \
       -mysqlConnUrl "root:root@tcp(127.0.0.1:33062)/nexus?autocommit=false"
 $ <PROJECT_ROOT>/bin/mysql_repl \
       -grpcPort=9123 \
       -nexusClusterUrl="http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusNodeId=3 \
+      -nexusListenAddr="http://127.0.0.1:9023" \
       -mysqlConnUrl "root:root@tcp(127.0.0.1:33063)/nexus?autocommit=false"
 ```
 
@@ -139,33 +139,32 @@ to all the 3 MySQL instances.
 At runtime, nodes belonging to an existing Nexus cluster can be removed or new nodes added, using the procedure described below.
 
 ```bash
-# Add a node with ID 4 and URL http://127.0.0.1:9024
-$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 addNode 4 "http://127.0.0.1:9024"
-Current cluster members:
-3 => http://127.0.0.1:9023
-4 => http://127.0.0.1:9024
-1 => http://127.0.0.1:9021
-2 => http://127.0.0.1:9022
-# Now launch this node
+# Launch a node listening at a specific address
 $ <PROJECT_ROOT>/bin/redis_repl \
       -grpcPort 9124 \
-      -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023,http://127.0.0.1:9024" \
-      -nexusNodeId 4 \
+      -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
+      -nexusListenAddr "http://127.0.0.1:9024" \
       -redisPort 6382 \
-      -nexusJoin
+# Add this node to the existing cluster
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 addNode "http://127.0.0.1:9024"
+Current cluster members:
+4c8e64e91e16db7c => http://127.0.0.1:9024
+663ca4baed7470b5 => http://127.0.0.1:9022
+a10202ab0eac4801 => http://127.0.0.1:9021 (leader)
+f3fd5b0446cc7033 => http://127.0.0.1:9023
 ```
 
-The first command makes the cluster aware of the new node, with ID 4, that is about to join the cluster. While the second command launches this new node. Note that the `-nexusJoin` flag must be used along with including this node's URL in the `-nexusClusterUrl` parameter.
+The first command makes the cluster aware of the new node that is about to join the cluster. While the second command launches this new node.
 
 Alternatively, nodes can be removed from an existing Nexus cluster. It does not matter even if the node about to be removed happens to be the leader of the cluster during that time. In such a case, the node removal is automatically followed by a leader election.
 
 ```bash
-# Remove node with ID 2
-$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 removeNode 2
+# Remove node with URL "http://127.0.0.1:9022"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 removeNode "http://127.0.0.1:9022"
 Current cluster members:
-1 => http://127.0.0.1:9021
-3 => http://127.0.0.1:9023
-4 => http://127.0.0.1:9024
+4c8e64e91e16db7c => http://127.0.0.1:9024
+a10202ab0eac4801 => http://127.0.0.1:9021 (leader)
+f3fd5b0446cc7033 => http://127.0.0.1:9023
 ```
 
 ### Reads based on leader leases
