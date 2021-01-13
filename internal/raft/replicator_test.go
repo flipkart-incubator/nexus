@@ -211,7 +211,7 @@ type cluster struct {
 
 func newCluster(size int) (*cluster, error) {
 	if size < 3 {
-		return nil, errors.New(fmt.Sprintf("Given size: %d. Minimum size must be 3", size))
+		return nil, fmt.Errorf("Given size: %d. Minimum size must be 3", size)
 	}
 
 	if err := createRaftDirs(); err != nil {

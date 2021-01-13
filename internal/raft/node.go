@@ -107,7 +107,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func(
 	}
 
 	if rc.join {
-		rc.rpeers[nodeId] = opts.ListenAddr()
+		rc.rpeers[nodeId] = opts.ListenAddr().String()
 	}
 	return rc
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"log"
+	"net"
 	"sync/atomic"
 	"time"
 
@@ -61,7 +62,7 @@ const (
 func initStatsD(opts pkg_raft.Options) stats.Client {
 	if statsdAddr := opts.StatsDAddr(); statsdAddr != "" {
 		return stats.NewStatsDClient(statsdAddr, MetricPrefix,
-			stats.NewTag(NodeIdDefaultTag, opts.ListenAddr()))
+			stats.NewTag(NodeIdDefaultTag, opts.ListenAddr().Host))
 	}
 	return stats.NewNoOpClient()
 }
@@ -178,10 +179,14 @@ func (this *replicator) AddMember(ctx context.Context, nodeUrl string) error {
 	if err != nil {
 		return err
 	}
+	nodeAddr := nodeOpts.ListenAddr()
+	if _, err := net.Dial("tcp", nodeAddr.Host); err != nil {
+		return fmt.Errorf("unable to verify RAFT service running at %s, error: %v", nodeAddr, err)
+	}
 	cc := raftpb.ConfChange{
 		Type:    raftpb.ConfChangeAddNode,
 		NodeID:  nodeOpts.NodeId(),
-		Context: []byte(nodeOpts.ListenAddr()),
+		Context: []byte(nodeAddr.String()),
 	}
 	return this.proposeConfigChange(ctx, cc)
 }
