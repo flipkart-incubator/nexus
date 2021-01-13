@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -16,7 +17,7 @@ type Option func(*options) error
 
 type Options interface {
 	NodeId() uint64
-	ListenAddr() string
+	ListenAddr() *url.URL
 	Join() bool
 	LogDir() string
 	SnapDir() string
@@ -27,10 +28,12 @@ type Options interface {
 }
 
 type options struct {
-	listenAddr      string
+	listenAddr      *url.URL
+	listenAddrStr   string
 	logDir          string
 	snapDir         string
 	clusterUrl      string
+	clusterUrls     []*url.URL
 	replTimeout     time.Duration
 	leaseBasedReads bool
 	statsdAddr      string
@@ -42,7 +45,7 @@ var (
 )
 
 func init() {
-	flag.StringVar(&opts.listenAddr, "nexusListenAddr", "", "Address on which Nexus service binds")
+	flag.StringVar(&opts.listenAddrStr, "nexusListenAddr", "", "Address on which Nexus service binds")
 	flag.StringVar(&opts.logDir, "nexusLogDir", "/tmp/logs", "Dir for storing RAFT logs")
 	flag.StringVar(&opts.snapDir, "nexusSnapDir", "/tmp/snap", "Dir for storing RAFT snapshots")
 	flag.StringVar(&opts.clusterUrl, "nexusClusterUrl", "", "Comma separated list of Nexus URLs")
@@ -53,7 +56,7 @@ func init() {
 
 func OptionsFromFlags() []Option {
 	return []Option{
-		ListenAddr(opts.listenAddr),
+		ListenAddr(opts.listenAddrStr),
 		LogDir(opts.logDir),
 		SnapDir(opts.snapDir),
 		ClusterUrl(opts.clusterUrl),
@@ -74,7 +77,7 @@ func NewOptions(opts ...Option) (Options, error) {
 }
 
 func (this *options) NodeId() uint64 {
-	return this.nodeId(this.listenAddr)
+	return this.nodeId(this.listenAddr.Host)
 }
 
 func (this *options) nodeId(addr string) uint64 {
@@ -82,18 +85,13 @@ func (this *options) nodeId(addr string) uint64 {
 	return binary.BigEndian.Uint64(hash[:8])
 }
 
-func (this *options) ListenAddr() string {
+func (this *options) ListenAddr() *url.URL {
 	return this.listenAddr
 }
 
 func (this *options) Join() bool {
-	clusUrls := this.ClusterUrls()
-	for _, clusUrl := range clusUrls {
-		if strings.TrimSpace(clusUrl) == this.listenAddr {
-			return false
-		}
-	}
-	return true
+	_, present := this.ClusterUrls()[this.NodeId()]
+	return !present
 }
 
 func (this *options) LogDir() string {
@@ -105,11 +103,10 @@ func (this *options) SnapDir() string {
 }
 
 func (this *options) ClusterUrls() map[uint64]string {
-	nodes := strings.Split(this.clusterUrl, ",")
-	res := make(map[uint64]string, len(nodes))
-	for _, node := range nodes {
-		id := this.nodeId(node)
-		res[id] = node
+	res := make(map[uint64]string, len(this.clusterUrls))
+	for _, nodeUrl := range this.clusterUrls {
+		id := this.nodeId(nodeUrl.Host)
+		res[id] = nodeUrl.String()
 	}
 	return res
 }
@@ -129,13 +126,31 @@ func (this *options) ReadOption() raft.ReadOnlyOption {
 	return raft.ReadOnlySafe
 }
 
+func validateAndParseAddress(addr string) (*url.URL, error) {
+	if nodeUrl, err := url.Parse(addr); err != nil {
+		return nil, fmt.Errorf("given listen address, %s is not a valid URL, error: %v", addr, err)
+	} else {
+		if nodeUrl.Scheme != "http" {
+			return nil, fmt.Errorf("given listen address, %s must have HTTP scheme", addr)
+		}
+		if !strings.ContainsRune(nodeUrl.Host, ':') {
+			return nil, fmt.Errorf("given listen address, %s must include port number", addr)
+		}
+		return nodeUrl, nil
+	}
+}
+
 func ListenAddr(addr string) Option {
 	return func(opts *options) error {
 		addr = strings.TrimSpace(addr)
 		if addr == "" {
 			return errors.New("Nexus listen address must be given")
 		}
-		opts.listenAddr = addr
+		if nodeUrl, err := validateAndParseAddress(addr); err != nil {
+			return err
+		} else {
+			opts.listenAddr = nodeUrl
+		}
 		return nil
 	}
 }
@@ -169,6 +184,14 @@ func ClusterUrl(url string) Option {
 			return errors.New("Raft cluster url must not be empty")
 		}
 		opts.clusterUrl = url
+		nodes := strings.Split(opts.clusterUrl, ",")
+		for _, node := range nodes {
+			if nodeUrl, err := validateAndParseAddress(node); err != nil {
+				return err
+			} else {
+				opts.clusterUrls = append(opts.clusterUrls, nodeUrl)
+			}
+		}
 		return nil
 	}
 }
