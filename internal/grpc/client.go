@@ -95,11 +95,11 @@ func (this *NexusClient) RemoveNode(nodeUrl string) error {
 	return nil
 }
 
-func (this *NexusClient) ListNodes() map[uint64]string {
+func (this *NexusClient) ListNodes() (uint64, map[uint64]string) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 	res, _ := this.nexusCli.ListNodes(ctx, &empty.Empty{})
-	return res.Nodes
+	return res.Leader, res.Nodes
 }
 
 func (this *NexusClient) Close() error {

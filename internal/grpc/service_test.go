@@ -92,8 +92,8 @@ func (this *mockRepl) RemoveMember(ctx context.Context, nodeUrl string) error {
 	return errors.New("mockRepl::RemoveMember not implemented")
 }
 
-func (this *mockRepl) ListMembers() map[uint64]string {
-	return nil
+func (this *mockRepl) ListMembers() (uint64, map[uint64]string) {
+	return uint64(0), nil
 }
 
 func (this *mockRepl) hasData(data []byte) bool {

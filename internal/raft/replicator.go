@@ -89,18 +89,10 @@ func (this *replicator) Start() {
 	this.node.startRaft()
 }
 
-func (this *replicator) ListMembers() map[uint64]string {
+func (this *replicator) ListMembers() (uint64, map[uint64]string) {
 	lead := this.node.getLeaderId()
 	peers := this.node.rpeers
-	members := make(map[uint64]string, len(peers))
-	for id, peer := range peers {
-		if id == lead {
-			members[id] = fmt.Sprintf("%s (leader)", peer)
-		} else {
-			members[id] = peer
-		}
-	}
-	return members
+	return lead, peers
 }
 
 func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {

@@ -80,5 +80,6 @@ func (this *NexusService) RemoveNode(ctx context.Context, req *api.RemoveNodeReq
 }
 
 func (this *NexusService) ListNodes(ctx context.Context, _ *empty.Empty) (*api.ListNodesResponse, error) {
-	return &api.ListNodesResponse{Status: &api.Status{}, Nodes: this.repl.ListMembers()}, nil
+	ldr, clusNodes := this.repl.ListMembers()
+	return &api.ListNodesResponse{Status: &api.Status{}, Leader: ldr, Nodes: clusNodes}, nil
 }

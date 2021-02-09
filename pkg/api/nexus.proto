@@ -39,7 +39,8 @@ message RemoveNodeRequest {
 
 message ListNodesResponse {
   Status status = 1;
-  map<uint64, string> nodes = 2;
+  uint64 leader = 2;
+  map<uint64, string> nodes = 3;
 }
 
 message HealthCheckRequest {

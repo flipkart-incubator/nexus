@@ -256,15 +256,12 @@ func (this *cluster) assertMembers(t *testing.T, members []string) {
 }
 
 func (peer *peer) assertMembers(t *testing.T, leader string, members []string) {
-	clusNodes := peer.repl.ListMembers()
+	leaderNode, clusNodes := peer.repl.ListMembers()
+	if clusNodes[leaderNode] != leader {
+		t.Errorf("For peer ID: %v, mismatch of URL for leader. Expected: '%v', Actual: '%v'", peer.id, leader, clusNodes[leaderNode])
+	}
 	var clusMembers []string
 	for _, clusNode := range clusNodes {
-		if idx := strings.Index(clusNode, " (leader)"); idx > 0 {
-			clusNode = clusNode[:idx]
-			if clusNode != leader {
-				t.Errorf("For peer ID: %v, mismatch of URL for leader. Expected: '%v', Actual: '%v'", peer.id, leader, clusNode)
-			}
-		}
 		clusMembers = append(clusMembers, clusNode)
 	}
 	sort.Strings(clusMembers)
