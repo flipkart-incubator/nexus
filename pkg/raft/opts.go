@@ -17,7 +17,7 @@ type Option func(*options) error
 
 type Options interface {
 	NodeId() uint64
-	ListenAddr() *url.URL
+	NodeUrl() *url.URL
 	Join() bool
 	LogDir() string
 	SnapDir() string
@@ -28,8 +28,8 @@ type Options interface {
 }
 
 type options struct {
-	listenAddr      *url.URL
-	listenAddrStr   string
+	nodeUrl         *url.URL
+	nodeUrlStr      string
 	logDir          string
 	snapDir         string
 	clusterUrl      string
@@ -45,10 +45,10 @@ var (
 )
 
 func init() {
-	flag.StringVar(&opts.listenAddrStr, "nexusListenAddr", "", "Address on which Nexus service binds")
+	flag.StringVar(&opts.nodeUrlStr, "nexusNodeUrl", "", "Url for the Nexus service to be started on this node (format: http://<local_node>:<port_num>)")
 	flag.StringVar(&opts.logDir, "nexusLogDir", "/tmp/logs", "Dir for storing RAFT logs")
 	flag.StringVar(&opts.snapDir, "nexusSnapDir", "/tmp/snap", "Dir for storing RAFT snapshots")
-	flag.StringVar(&opts.clusterUrl, "nexusClusterUrl", "", "Comma separated list of Nexus URLs")
+	flag.StringVar(&opts.clusterUrl, "nexusClusterUrl", "", "Comma separated list of Nexus URLs of other nodes in the cluster")
 	flag.Int64Var(&replTimeoutInSecs, "nexusReplTimeout", 5, "Replication timeout in seconds")
 	flag.BoolVar(&opts.leaseBasedReads, "nexusLeaseBasedReads", true, "Perform reads using RAFT leader leases")
 	flag.StringVar(&opts.statsdAddr, "nexusStatsDAddr", "", "StatsD server address (host:port) for relaying various metrics")
@@ -56,7 +56,7 @@ func init() {
 
 func OptionsFromFlags() []Option {
 	return []Option{
-		ListenAddr(opts.listenAddrStr),
+		NodeUrl(opts.nodeUrlStr),
 		LogDir(opts.logDir),
 		SnapDir(opts.snapDir),
 		ClusterUrl(opts.clusterUrl),
@@ -77,16 +77,16 @@ func NewOptions(opts ...Option) (Options, error) {
 }
 
 func (this *options) NodeId() uint64 {
-	return this.nodeId(this.listenAddr.Host)
+	return this.nodeId(this.nodeUrl.Host)
 }
 
-func (this *options) nodeId(addr string) uint64 {
-	hash := sha1.Sum([]byte(addr))
+func (this *options) nodeId(url string) uint64 {
+	hash := sha1.Sum([]byte(url))
 	return binary.BigEndian.Uint64(hash[:8])
 }
 
-func (this *options) ListenAddr() *url.URL {
-	return this.listenAddr
+func (this *options) NodeUrl() *url.URL {
+	return this.nodeUrl
 }
 
 func (this *options) Join() bool {
@@ -140,7 +140,7 @@ func validateAndParseAddress(addr string) (*url.URL, error) {
 	}
 }
 
-func ListenAddr(addr string) Option {
+func NodeUrl(addr string) Option {
 	return func(opts *options) error {
 		addr = strings.TrimSpace(addr)
 		if addr == "" {
@@ -149,7 +149,7 @@ func ListenAddr(addr string) Option {
 		if nodeUrl, err := validateAndParseAddress(addr); err != nil {
 			return err
 		} else {
-			opts.listenAddr = nodeUrl
+			opts.nodeUrl = nodeUrl
 		}
 		return nil
 	}

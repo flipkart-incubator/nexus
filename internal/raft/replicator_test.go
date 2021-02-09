@@ -283,7 +283,7 @@ type peer struct {
 func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 	peerAddr := strings.Split(clusterUrl, ",")[id]
 	opts, err := raft.NewOptions(
-		raft.ListenAddr(peerAddr),
+		raft.NodeUrl(peerAddr),
 		raft.LogDir(logDir),
 		raft.SnapDir(snapDir),
 		raft.ClusterUrl(clusterUrl),
@@ -305,7 +305,7 @@ func newPeer(id int) (*peer, error) {
 
 func newJoiningPeer(peerAddr string) (*peer, error) {
 	opts, err := raft.NewOptions(
-		raft.ListenAddr(peerAddr),
+		raft.NodeUrl(peerAddr),
 		raft.LogDir(logDir),
 		raft.SnapDir(snapDir),
 		raft.ClusterUrl(clusterUrl),

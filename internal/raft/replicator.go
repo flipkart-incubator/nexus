@@ -62,7 +62,7 @@ const (
 func initStatsD(opts pkg_raft.Options) stats.Client {
 	if statsdAddr := opts.StatsDAddr(); statsdAddr != "" {
 		return stats.NewStatsDClient(statsdAddr, MetricPrefix,
-			stats.NewTag(NodeIdDefaultTag, opts.ListenAddr().Host))
+			stats.NewTag(NodeIdDefaultTag, opts.NodeUrl().Host))
 	}
 	return stats.NewNoOpClient()
 }
@@ -175,11 +175,11 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 }
 
 func (this *replicator) AddMember(ctx context.Context, nodeUrl string) error {
-	nodeOpts, err := pkg_raft.NewOptions(pkg_raft.ListenAddr(nodeUrl))
+	nodeOpts, err := pkg_raft.NewOptions(pkg_raft.NodeUrl(nodeUrl))
 	if err != nil {
 		return err
 	}
-	nodeAddr := nodeOpts.ListenAddr()
+	nodeAddr := nodeOpts.NodeUrl()
 	if _, err := net.Dial("tcp", nodeAddr.Host); err != nil {
 		return fmt.Errorf("unable to verify RAFT service running at %s, error: %v", nodeAddr, err)
 	}
@@ -192,7 +192,7 @@ func (this *replicator) AddMember(ctx context.Context, nodeUrl string) error {
 }
 
 func (this *replicator) RemoveMember(ctx context.Context, nodeUrl string) error {
-	nodeOpts, err := pkg_raft.NewOptions(pkg_raft.ListenAddr(nodeUrl))
+	nodeOpts, err := pkg_raft.NewOptions(pkg_raft.NodeUrl(nodeUrl))
 	if err != nil {
 		return err
 	}

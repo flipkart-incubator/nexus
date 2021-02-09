@@ -55,17 +55,17 @@ Launch the following 3 commands in separate terminal sessions:
 $ <PROJECT_ROOT>/bin/redis_repl \
       -grpcPort 9121 \
       -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusListenAddr "http://127.0.0.1:9021" \
+      -nexusNodeUrl "http://127.0.0.1:9021" \
       -redisPort 6379
 $ <PROJECT_ROOT>/bin/redis_repl \
       -grpcPort 9122 \
       -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusListenAddr "http://127.0.0.1:9022" \
+      -nexusNodeUrl "http://127.0.0.1:9022" \
       -redisPort 6380
 $ <PROJECT_ROOT>/bin/redis_repl \
       -grpcPort 9123 \
       -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusListenAddr "http://127.0.0.1:9023" \
+      -nexusNodeUrl "http://127.0.0.1:9023" \
       -redisPort 6381
 ```
 
@@ -103,23 +103,23 @@ Launch the following 3 commands in separate terminal sessions:
 $ <PROJECT_ROOT>/bin/mysql_repl \
       -grpcPort=9121 \
       -nexusClusterUrl="http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusListenAddr="http://127.0.0.1:9021" \
+      -nexusNodeUrl="http://127.0.0.1:9021" \
       -mysqlConnUrl "root:root@tcp(127.0.0.1:33061)/nexus?autocommit=false"
 $ <PROJECT_ROOT>/bin/mysql_repl \
       -grpcPort=9122 \
       -nexusClusterUrl="http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusListenAddr="http://127.0.0.1:9022" \
+      -nexusNodeUrl="http://127.0.0.1:9022" \
       -mysqlConnUrl "root:root@tcp(127.0.0.1:33062)/nexus?autocommit=false"
 $ <PROJECT_ROOT>/bin/mysql_repl \
       -grpcPort=9123 \
       -nexusClusterUrl="http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusListenAddr="http://127.0.0.1:9023" \
+      -nexusNodeUrl="http://127.0.0.1:9023" \
       -mysqlConnUrl "root:root@tcp(127.0.0.1:33063)/nexus?autocommit=false"
 ```
 
 In a separate terminal session, launch the `repl` utility:
 ```bash
-# Create a sync_table in all the nodes
+# Create a `sync_table` in all the nodes
 $ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 mysql save "create table sync_table (id INT PRIMARY KEY AUTO_INCREMENT, data VARCHAR(50) NOT NULL, ts timestamp(3) default current_timestamp(3) on update current_timestamp(3));"
 
 # Insert some data into this table
@@ -143,7 +143,7 @@ At runtime, nodes belonging to an existing Nexus cluster can be removed or new n
 $ <PROJECT_ROOT>/bin/redis_repl \
       -grpcPort 9124 \
       -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusListenAddr "http://127.0.0.1:9024" \
+      -nexusNodeUrl "http://127.0.0.1:9024" \
       -redisPort 6382 \
 # Add this node to the existing cluster
 $ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 addNode "http://127.0.0.1:9024"

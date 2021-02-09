@@ -3,13 +3,13 @@ package raft
 import "testing"
 
 func TestListenAddr(t *testing.T) {
-	withoutError(t, ListenAddr("http://web.site:9090"))
-	withError(t, ListenAddr("web.site:9090"))
-	withError(t, ListenAddr("web.site"))
-	withError(t, ListenAddr("ftp://web.site"))
-	withError(t, ListenAddr("  "))
-	withError(t, ListenAddr("::"))
-	withError(t, ListenAddr("http://web site:9090"))
+	withoutError(t, NodeUrl("http://web.site:9090"))
+	withError(t, NodeUrl("web.site:9090"))
+	withError(t, NodeUrl("web.site"))
+	withError(t, NodeUrl("ftp://web.site"))
+	withError(t, NodeUrl("  "))
+	withError(t, NodeUrl("::"))
+	withError(t, NodeUrl("http://web site:9090"))
 }
 
 func TestLogDir(t *testing.T) {
@@ -32,7 +32,7 @@ func TestClusterUrl(t *testing.T) {
 func TestJoin(t *testing.T) {
 	clusUrl := "http://site1:9090,http://site2:9090,http://site3:9090"
 	nodeUrl := "http://site2:9090"
-	if opts, err := NewOptions(ListenAddr(nodeUrl), ClusterUrl(clusUrl)); err != nil {
+	if opts, err := NewOptions(NodeUrl(nodeUrl), ClusterUrl(clusUrl)); err != nil {
 		t.Errorf("Expected no error but got: %v", err)
 	} else {
 		join := opts.Join()
@@ -42,7 +42,7 @@ func TestJoin(t *testing.T) {
 	}
 
 	nodeUrl = "http://site4:9090"
-	if opts, err := NewOptions(ListenAddr(nodeUrl), ClusterUrl(clusUrl)); err != nil {
+	if opts, err := NewOptions(NodeUrl(nodeUrl), ClusterUrl(clusUrl)); err != nil {
 		t.Errorf("Expected no error but got: %v", err)
 	} else {
 		join := opts.Join()
