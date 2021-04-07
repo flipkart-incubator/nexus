@@ -146,14 +146,10 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 			return nil, inr.Err
 		} else {
 			index := binary.BigEndian.Uint64(inr.Res)
-			if ai := this.node.appliedIndex; ai < index {
-				log.Printf("[WARN] [Node %x] Waiting for read index to be applied. ReadIndex: %d, AppliedIndex: %d", this.node.id, index, ai)
-				// wait for applied index to catchup
-				select {
-				case <-this.applyWait.Wait(index):
-				case <-child_ctx.Done():
-					return nil, child_ctx.Err()
-				}
+			select {
+			case <-this.applyWait.Wait(index):
+			case <-child_ctx.Done():
+				return nil, child_ctx.Err()
 			}
 			res, err := this.store.Load(data)
 			return res, err
