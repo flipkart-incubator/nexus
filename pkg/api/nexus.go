@@ -11,6 +11,7 @@ import (
 
 type RaftReplicator interface {
 	Start()
+	Id() uint64
 	Save(context.Context, []byte) ([]byte, error)
 	Load(context.Context, []byte) ([]byte, error)
 	AddMember(context.Context, string) error

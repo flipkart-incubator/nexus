@@ -83,6 +83,10 @@ func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
 	return repl
 }
 
+func (this *replicator) Id() uint64 {
+	return this.node.id
+}
+
 func (this *replicator) Start() {
 	go this.readCommits()
 	go this.readReadStates()

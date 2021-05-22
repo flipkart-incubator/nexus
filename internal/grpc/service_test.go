@@ -64,6 +64,10 @@ func newMockRepl() *mockRepl {
 	return &mockRepl{data: make(map[uint32][]byte)}
 }
 
+func (this *mockRepl) Id() uint64 {
+	return 0
+}
+
 func (this *mockRepl) Start() {
 }
 
