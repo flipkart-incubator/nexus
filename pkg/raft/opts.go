@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -56,10 +57,10 @@ func init() {
 
 func OptionsFromFlags() []Option {
 	return []Option{
-		NodeUrl(opts.nodeUrlStr),
 		LogDir(opts.logDir),
 		SnapDir(opts.snapDir),
 		ClusterUrl(opts.clusterUrl),
+		NodeUrl(opts.nodeUrlStr),
 		ReplicationTimeout(time.Duration(replTimeoutInSecs) * time.Second),
 		LeaseBasedReads(opts.leaseBasedReads),
 		StatsDAddr(opts.statsdAddr),
@@ -126,6 +127,29 @@ func (this *options) ReadOption() raft.ReadOnlyOption {
 	return raft.ReadOnlySafe
 }
 
+func getLocalIPAddress() (map[string]net.IP, error) {
+	var ips = make(map[string]net.IP)
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	for _, i := range ifaces {
+		addrs, err := i.Addrs()
+		if err != nil {
+			return nil, err
+		}
+		for _, addr := range addrs {
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ips[v.IP.String()] = v.IP
+			case *net.IPAddr:
+				ips[v.IP.String()] = v.IP
+			}
+		}
+	}
+	return ips, nil
+}
+
 func validateAndParseAddress(addr string) (*url.URL, error) {
 	if nodeUrl, err := url.Parse(addr); err != nil {
 		return nil, fmt.Errorf("given listen address, %s is not a valid URL, error: %v", addr, err)
@@ -144,7 +168,19 @@ func NodeUrl(addr string) Option {
 	return func(opts *options) error {
 		addr = strings.TrimSpace(addr)
 		if addr == "" {
-			return errors.New("Nexus listen address must be given")
+			//try to auto determine nodeUrl from clusterUrl
+			localIps, err := getLocalIPAddress()
+			if err == nil {
+				for _, clusterUrl := range opts.clusterUrls {
+					//check if localIps contains this
+					host, _, _ := net.SplitHostPort(clusterUrl.Host)
+					if _, ok := localIps[host]; ok {
+						opts.nodeUrl = clusterUrl
+						return nil
+					}
+				}
+			}
+			return errors.New("nexus listen address not provided & auto detection failed")
 		}
 		if nodeUrl, err := validateAndParseAddress(addr); err != nil {
 			return err
