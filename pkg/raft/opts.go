@@ -127,8 +127,8 @@ func (this *options) ReadOption() raft.ReadOnlyOption {
 	return raft.ReadOnlySafe
 }
 
-func getLocalIPAddress() ([]net.IP, error) {
-	var ips []net.IP
+func getLocalIPAddress() (map[string]net.IP, error) {
+	var ips = make(map[string]net.IP)
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
@@ -139,14 +139,12 @@ func getLocalIPAddress() ([]net.IP, error) {
 			return nil, err
 		}
 		for _, addr := range addrs {
-			var ip net.IP
 			switch v := addr.(type) {
 			case *net.IPNet:
-				ip = v.IP
+				ips[v.IP.String()] = v.IP
 			case *net.IPAddr:
-				ip = v.IP
+				ips[v.IP.String()] = v.IP
 			}
-			ips = append(ips, ip)
 		}
 	}
 	return ips, nil
@@ -176,11 +174,9 @@ func NodeUrl(addr string) Option {
 				for _, clusterUrl := range opts.clusterUrls {
 					//check if localIps contains this
 					host, _, _ := net.SplitHostPort(clusterUrl.Host)
-					for _, ip := range localIps {
-						if ip.String() == host {
-							opts.nodeUrl = clusterUrl
-							return nil
-						}
+					if _, ok := localIps[host]; ok {
+						opts.nodeUrl = clusterUrl
+						return nil
 					}
 				}
 			}
