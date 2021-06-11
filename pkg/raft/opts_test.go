@@ -52,6 +52,17 @@ func TestJoin(t *testing.T) {
 	}
 }
 
+func TestDiscoverAddr(t *testing.T) {
+	if opts, err := NewOptions(ClusterUrl("http://127.0.0.1:9090,http://site2:9090,http://site3:9090"), NodeUrl("")); err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	} else {
+		join := opts.Join()
+		if join {
+			t.Errorf("Expected join flag to be false")
+		}
+	}
+}
+
 func withError(t *testing.T, opt Option) {
 	if _, err := NewOptions(opt); err != nil {
 		t.Logf("As expected, received error: %v", err)
