@@ -16,12 +16,15 @@ package raft
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/binary"
 	"errors"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"time"
 
@@ -46,6 +49,7 @@ type raftNode struct {
 	errorC     chan error          // errors from raft session
 
 	id          uint64 // client ID for raft session
+	cid         uint64 //clusterId
 	join        bool   // node is joining an existing cluster
 	waldir      string // path to WAL directory
 	snapdir     string // path to snapshot directory
@@ -106,6 +110,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func(
 		// rest of structure populated after WAL replay
 	}
 
+	rc.genClusterID()
 	if rc.join {
 		rc.rpeers[nodeId] = opts.NodeUrl().String()
 	}
@@ -267,6 +272,24 @@ func (rc *raftNode) writeError(err error) {
 	rc.node.Stop()
 }
 
+func (rc *raftNode) genClusterID() {
+	//sort the id's first. This is required because clusterId should be constant
+	// even if the member are written in any order.
+	ids := make([]uint64, len(rc.rpeers))
+	for id := range rc.rpeers {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	b := make([]byte, 8*len(ids))
+	for i, id := range ids {
+		binary.BigEndian.PutUint64(b[8*i:], id)
+	}
+	hash := sha1.Sum(b)
+	rc.cid = binary.BigEndian.Uint64(hash[:8])
+	//log.Printf("genClusterID %+v Members %+v \n B Array %+v", rc.cid, mIDs, b)
+}
+
 func (rc *raftNode) startRaft() {
 	if !fileutil.Exist(rc.snapdir) {
 		if err := os.Mkdir(rc.snapdir, 0750); err != nil {
@@ -305,7 +328,7 @@ func (rc *raftNode) startRaft() {
 
 	rc.transport = &rafthttp.Transport{
 		ID:          types.ID(rc.id),
-		ClusterID:   0x1000,
+		ClusterID:   types.ID(rc.cid),
 		Raft:        rc,
 		ServerStats: etcd_stats.NewServerStats("", ""),
 		LeaderStats: etcd_stats.NewLeaderStats(strconv.Itoa(int(rc.id))),
