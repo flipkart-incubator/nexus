@@ -226,8 +226,8 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 }
 
 func (this *replicator) readCommits() {
-	for entry := range this.node.commitC {
-		if entry == nil {
+	for _commit := range this.node.commitC {
+		if _commit == nil {
 			log.Printf("[Node %x] Received a message in the commit channel with no data", this.node.id)
 			snapshot, err := this.node.snapshotter.Load()
 			if err == snap.ErrNoSnapshot {
@@ -241,7 +241,10 @@ func (this *replicator) readCommits() {
 			if err := this.store.Restore(snapshot.Data); err != nil {
 				log.Panic(err)
 			}
-		} else {
+			continue
+		}
+
+		for _, entry := range _commit.data {
 			if len(entry.Data) > 0 {
 				switch entry.Type {
 				case raftpb.EntryNormal:
@@ -265,7 +268,9 @@ func (this *replicator) readCommits() {
 			// signal any linearizable reads blocked for this index
 			this.applyWait.Trigger(entry.Index)
 		}
+		close(_commit.applyDoneC)
 	}
+
 	if err, present := <-this.node.errorC; present {
 		log.Fatal(err)
 	}
