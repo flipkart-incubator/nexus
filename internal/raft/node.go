@@ -55,7 +55,7 @@ type commit struct {
 // A key-value stream backed by raft
 type raftNode struct {
 
-	proposeC    <-chan *raftpb.Entry            // proposed messages (k,v)
+	//proposeC    <-chan *raftpb.Entry            // proposed messages (k,v)
 	readStateC chan raft.ReadState // to send out readState
 	commitC    chan *commit  // entries committed to log (k,v)
 	errorC     chan error          // errors from raft session
@@ -103,14 +103,14 @@ type raftNode struct {
 // current), then new log entries. To shutdown, close proposeC and read errorC.
 func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func() ([]byte, error)) *raftNode {
 
-	proposeC := make(chan *raftpb.Entry)
+	//proposeC := make(chan *raftpb.Entry)
 	readStateC := make(chan raft.ReadState)
 	commitC := make(chan *commit)
 	errorC := make(chan error)
 	nodeId := opts.NodeId()
 
 	rc := &raftNode{
-		proposeC:    proposeC,
+		//proposeC:    proposeC,
 		readStateC:  readStateC,
 		commitC:     commitC,
 		errorC:      errorC,
@@ -258,7 +258,7 @@ func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 	if snapshot != nil {
 		walsnap.Index, walsnap.Term = snapshot.Metadata.Index, snapshot.Metadata.Term
 	}
-	log.Printf("[Node %x] loading WAL at term %d and index %d", rc.id, walsnap.Term, walsnap.Index)
+	log.Printf("nexus.raft: [Node %x] loading WAL at term %d and index %d", rc.id, walsnap.Term, walsnap.Index)
 	w, err := wal.Open(rc.logger, rc.waldir, walsnap)
 	if err != nil {
 		log.Fatalf("nexus.raft: [Node %x] error loading wal (%v)", rc.id, err)
@@ -269,7 +269,7 @@ func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 
 // replayWAL replays WAL entries into the raft instance.
 func (rc *raftNode) replayWAL() *wal.WAL {
-	log.Printf("[Node %x] replaying WAL", rc.id)
+	log.Printf("nexus.raft: [Node %x] replaying WAL", rc.id)
 	snapshot := rc.loadSnapshot()
 	w := rc.openWAL(snapshot)
 	_, st, ents, err := w.ReadAll()

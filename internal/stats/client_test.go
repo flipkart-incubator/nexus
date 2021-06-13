@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -26,6 +25,11 @@ func TestStatsDClient(t *testing.T) {
 
 	statsdAdminUrl := fmt.Sprintf("%s:%d", statsDHost, adminPort)
 	conn := connectToStatsD(t, statsdAdminUrl)
+
+	if conn == nil {
+		t.Log("Failed to connect to StatsD endpoint, skipping test...")
+		return
+	}
 
 	s, w := bufio.NewScanner(conn), bufio.NewWriter(conn)
 	//flushDuration := statsdFlushInterval(s, w)
@@ -79,7 +83,7 @@ func connectToStatsD(t *testing.T, statsdAdminUrl string) net.Conn {
 	conn, err := net.Dial("tcp", statsdAdminUrl)
 	if err != nil {
 		t.Logf("Unable to connect to StatsD admin endpoint: %s. Skipping this test.", statsdAdminUrl)
-		os.Exit(0)
+		return nil
 	}
 	return conn
 }
