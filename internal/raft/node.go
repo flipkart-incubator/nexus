@@ -19,6 +19,7 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
+	"go.uber.org/zap"
 	"log"
 	"net"
 	"net/http"
@@ -31,15 +32,15 @@ import (
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
 
-	etcd_stats "github.com/coreos/etcd/etcdserver/stats"
-	"github.com/coreos/etcd/pkg/fileutil"
-	"github.com/coreos/etcd/pkg/types"
-	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/coreos/etcd/rafthttp"
-	"github.com/coreos/etcd/snap"
-	"github.com/coreos/etcd/wal"
-	"github.com/coreos/etcd/wal/walpb"
+	"go.etcd.io/etcd/client/pkg/v3/fileutil"
+	"go.etcd.io/etcd/client/pkg/v3/types"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/rafthttp"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/snap"
+	etcd_stats "go.etcd.io/etcd/server/v3/etcdserver/api/v2stats"
+	"go.etcd.io/etcd/server/v3/wal"
+	"go.etcd.io/etcd/server/v3/wal/walpb"
 )
 
 const (
@@ -48,6 +49,10 @@ const (
 
 // A key-value stream backed by raft
 type raftNode struct {
+
+	//proposeC    <-chan string            // proposed messages (k,v)
+	//confChangeC <-chan raftpb.ConfChange // proposed cluster config changes
+
 	readStateC chan raft.ReadState // to send out readState
 	commitC    chan *raftpb.Entry  // entries committed to log (k,v)
 	errorC     chan error          // errors from raft session
@@ -83,6 +88,8 @@ type raftNode struct {
 	snapshotCatchUpEntries uint64
 	maxSnapFiles           uint
 	maxWALFiles            uint
+
+	logger *zap.Logger
 }
 
 // NewRaftNode initiates a raft instance and returns a committed log entry
@@ -116,6 +123,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func(
 		statsCli:               statsCli,
 		maxSnapFiles:           opts.MaxSnapFiles(),
 		maxWALFiles:            opts.MaxWALFiles(),
+		logger: zap.NewExample(),
 		// rest of structure populated after WAL replay
 	}
 
@@ -227,7 +235,7 @@ func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 			log.Fatalf("nexus.raft: [Node %x] cannot create dir for wal (%v)", rc.id, err)
 		}
 
-		w, err := wal.Create(rc.waldir, nil)
+		w, err := wal.Create(rc.logger, rc.waldir, nil)
 		if err != nil {
 			log.Fatalf("nexus.raft: [Node %x] create wal error (%v)", rc.id, err)
 		}
@@ -239,7 +247,7 @@ func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 		walsnap.Index, walsnap.Term = snapshot.Metadata.Index, snapshot.Metadata.Term
 	}
 	log.Printf("[Node %x] loading WAL at term %d and index %d", rc.id, walsnap.Term, walsnap.Index)
-	w, err := wal.Open(rc.waldir, walsnap)
+	w, err := wal.Open(rc.logger, rc.waldir, walsnap)
 	if err != nil {
 		log.Fatalf("nexus.raft: [Node %x] error loading wal (%v)", rc.id, err)
 	}
@@ -305,7 +313,7 @@ func (rc *raftNode) startRaft() {
 			log.Fatalf("nexus.raft: [Node %x] cannot create dir for snapshot (%v)", rc.id, err)
 		}
 	}
-	rc.snapshotter = snap.New(rc.snapdir)
+	rc.snapshotter = snap.New(rc.logger, rc.snapdir)
 
 	oldwal := wal.Exist(rc.waldir)
 	rc.wal = rc.replayWAL()
@@ -340,7 +348,7 @@ func (rc *raftNode) startRaft() {
 		ClusterID:   types.ID(rc.cid),
 		Raft:        rc,
 		ServerStats: etcd_stats.NewServerStats("", ""),
-		LeaderStats: etcd_stats.NewLeaderStats(strconv.Itoa(int(rc.id))),
+		LeaderStats: etcd_stats.NewLeaderStats(rc.logger, strconv.Itoa(int(rc.id))),
 		ErrorC:      make(chan error),
 	}
 
@@ -526,10 +534,10 @@ func (rc *raftNode) purgeFile() {
 	log.Printf("nexus.raft: [Node %x] Starting purgeFile() \n", rc.id)
 	var serrc, werrc <-chan error
 	if rc.maxSnapFiles > 0 {
-		serrc = fileutil.PurgeFile(rc.snapdir, "snap", rc.maxSnapFiles, purgeFileInterval, rc.stopc)
+		serrc = fileutil.PurgeFile(rc.logger, rc.snapdir, "snap", rc.maxSnapFiles, purgeFileInterval, rc.stopc)
 	}
 	if rc.maxWALFiles > 0 {
-		werrc = fileutil.PurgeFile(rc.waldir, "wal", rc.maxWALFiles, purgeFileInterval, rc.stopc)
+		werrc = fileutil.PurgeFile(rc.logger, rc.waldir, "wal", rc.maxWALFiles, purgeFileInterval, rc.stopc)
 	}
 
 	select {

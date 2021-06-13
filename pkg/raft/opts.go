@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coreos/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 const (

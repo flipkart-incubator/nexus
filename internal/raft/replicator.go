@@ -11,13 +11,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coreos/etcd/pkg/idutil"
-	"github.com/coreos/etcd/pkg/wait"
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
+	"go.etcd.io/etcd/pkg/v3/idutil"
+	"go.etcd.io/etcd/pkg/v3/wait"
+	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/snap"
 )
 
 type internalNexusRequest struct {
