@@ -318,8 +318,8 @@ func MaxSnapFiles(count int) Option {
 
 func MaxWALFiles(count int) Option {
 	return func(opts *options) error {
-		if count < 1 {
-			return errors.New("maxWALFiles cannot be < 1")
+		if count < 0 {
+			return errors.New("maxWALFiles cannot be negative")
 		}
 		opts.maxWALFiles = count
 		return nil
@@ -328,8 +328,8 @@ func MaxWALFiles(count int) Option {
 
 func SnapshotCount(count int64) Option {
 	return func(opts *options) error {
-		if count < 1 {
-			return errors.New("snapshotCount cannot be < 1")
+		if count < 0 {
+			return errors.New("snapshotCount cannot be negative")
 		}
 		opts.snapshotCount = count
 		return nil
