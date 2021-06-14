@@ -47,7 +47,7 @@ func testListMembers(t *testing.T) {
 
 func testSaveLoadLargeData(t *testing.T) {
 	var reqs []*kvReq
-	var iterations = 100
+	var iterations = 20
 	// Saving
 	writePeer := clus.peers[0]
 	runId := writePeer.id
