@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	defaultSnapshotCount int64 = 100000
+	defaultSnapshotCount int64 = 10000
 	// defaultSnapshotCatchUpEntries is the number of entries for a slow follower
 	// to catch-up after compacting the raft storage entries.
 	// We expect the follower has a millisecond level latency with the leader.
