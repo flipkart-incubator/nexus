@@ -308,8 +308,8 @@ func (this *options) SnapshotCatchUpEntries() uint64 {
 
 func MaxSnapFiles(count int) Option {
 	return func(opts *options) error {
-		if count < 1 {
-			return errors.New("maxSnapFiles cannot be < 1")
+		if count < 0 {
+			return errors.New("maxSnapFiles cannot be negative")
 		}
 		opts.maxSnapFiles = count
 		return nil
@@ -328,8 +328,8 @@ func MaxWALFiles(count int) Option {
 
 func SnapshotCount(count int64) Option {
 	return func(opts *options) error {
-		if count < 0 {
-			return errors.New("snapshotCount cannot be negative")
+		if count < 1 {
+			return errors.New("snapshotCount cannot be < 1")
 		}
 		opts.snapshotCount = count
 		return nil
