@@ -77,10 +77,10 @@ func init() {
 	flag.BoolVar(&opts.leaseBasedReads, "nexus-lease-based-reads", true, "Perform reads using RAFT leader leases")
 	flag.StringVar(&opts.statsdAddr, "nexus-statsd-addr", "", "StatsD server address (host:port) for relaying various metrics")
 
-	flag.IntVar(&opts.maxSnapFiles, "max-snapshots", defaultMaxSNAP, "Maximum number of snapshot files to retain (0 is unlimited)")
-	flag.IntVar(&opts.maxWALFiles, "max-wals", defaultMaxWAL, "Maximum number of wal files to retain (0 is unlimited)")
-	flag.Int64Var(&opts.snapshotCount, "snapshot-count", defaultSnapshotCount, "Number of committed transactions to trigger a snapshot to disk. (default 10K)")
-	flag.Int64Var(&opts.snapshotCatchUpEntries, "snapshot-catchup-entries", defaultSnapshotCatchUpEntries, "Number of entries for a slow follower to catch-up after compacting the raft storage entries (Default 5K)")
+	flag.IntVar(&opts.maxSnapFiles, "nexus-max-snapshots", defaultMaxSNAP, "Maximum number of snapshot files to retain (0 is unlimited)")
+	flag.IntVar(&opts.maxWALFiles, "nexus-max-wals", defaultMaxWAL, "Maximum number of wal files to retain (0 is unlimited)")
+	flag.Int64Var(&opts.snapshotCount, "nexus-snapshot-count", defaultSnapshotCount, "Number of committed transactions to trigger a snapshot to disk. (default 10K)")
+	flag.Int64Var(&opts.snapshotCatchUpEntries, "nexus-snapshot-catchup-entries", defaultSnapshotCatchUpEntries, "Number of entries for a slow follower to catch-up after compacting the raft storage entries (Default 5K)")
 }
 
 func OptionsFromFlags() []Option {
@@ -308,8 +308,8 @@ func (this *options) SnapshotCatchUpEntries() uint64 {
 
 func MaxSnapFiles(count int) Option {
 	return func(opts *options) error {
-		if count < 0 {
-			return errors.New("maxSnapFiles cannot be negative")
+		if count < 1 {
+			return errors.New("maxSnapFiles cannot be < 1")
 		}
 		opts.maxSnapFiles = count
 		return nil
@@ -318,8 +318,8 @@ func MaxSnapFiles(count int) Option {
 
 func MaxWALFiles(count int) Option {
 	return func(opts *options) error {
-		if count < 0 {
-			return errors.New("maxWALFiles cannot be negative")
+		if count < 1 {
+			return errors.New("maxWALFiles cannot be < 1")
 		}
 		opts.maxWALFiles = count
 		return nil
@@ -328,8 +328,8 @@ func MaxWALFiles(count int) Option {
 
 func SnapshotCount(count int64) Option {
 	return func(opts *options) error {
-		if count < 0 {
-			return errors.New("snapshotCount cannot be negative")
+		if count < 1 {
+			return errors.New("snapshotCount cannot be < 1")
 		}
 		opts.snapshotCount = count
 		return nil
@@ -338,8 +338,8 @@ func SnapshotCount(count int64) Option {
 
 func SnapshotCatchUpEntries(count int64) Option {
 	return func(opts *options) error {
-		if count < 0 {
-			return errors.New("snapshotCatchUpEntries cannot be negative")
+		if count < 1 {
+			return errors.New("snapshotCatchUpEntries cannot be < 1")
 		}
 		opts.snapshotCatchUpEntries = count
 		return nil
