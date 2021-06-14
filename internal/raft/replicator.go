@@ -91,6 +91,7 @@ func (this *replicator) Start() {
 	go this.readCommits()
 	go this.readReadStates()
 	this.node.startRaft()
+	go this.node.purgeFile()
 }
 
 func (this *replicator) ListMembers() (uint64, map[uint64]string) {

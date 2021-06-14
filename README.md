@@ -20,8 +20,6 @@ can be achieved with few data stores.
 ## Building Nexus
 
 ```bash
-$ mkdir -p ${GOPATH}/src/github.com/flipkart-incubator
-$ cd ${GOPATH}/src/github.com/flipkart-incubator
 $ git clone https://github.com/flipkart-incubator/nexus
 $ cd nexus
 $ make build
@@ -53,19 +51,19 @@ the example sync replication service to make changes to these 3 keyspaces synchr
 Launch the following 3 commands in separate terminal sessions:
 ```bash
 $ <PROJECT_ROOT>/bin/redis_repl \
+      -nexus-cluster-url "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
+      -nexus-node-url "http://127.0.0.1:9021" \
       -grpcPort 9121 \
-      -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusNodeUrl "http://127.0.0.1:9021" \
       -redisPort 6379
 $ <PROJECT_ROOT>/bin/redis_repl \
+      -nexus-cluster-url "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
+      -nexus-node-url "http://127.0.0.1:9022" \
       -grpcPort 9122 \
-      -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusNodeUrl "http://127.0.0.1:9022" \
       -redisPort 6380
 $ <PROJECT_ROOT>/bin/redis_repl \
+      -nexus-cluster-url "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
+      -nexus-node-url "http://127.0.0.1:9023" \
       -grpcPort 9123 \
-      -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusNodeUrl "http://127.0.0.1:9023" \
       -redisPort 6381
 ```
 
@@ -101,19 +99,19 @@ examples to work, please first create a database named `nexus` in each of the 3 
 Launch the following 3 commands in separate terminal sessions:
 ```bash
 $ <PROJECT_ROOT>/bin/mysql_repl \
+      -nexus-cluster-url="http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
+      -nexus-node-url="http://127.0.0.1:9021" \
       -grpcPort=9121 \
-      -nexusClusterUrl="http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusNodeUrl="http://127.0.0.1:9021" \
       -mysqlConnUrl "root:root@tcp(127.0.0.1:33061)/nexus?autocommit=false"
 $ <PROJECT_ROOT>/bin/mysql_repl \
+      -nexus-cluster-url="http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
+      -nexus-node-url="http://127.0.0.1:9022" \
       -grpcPort=9122 \
-      -nexusClusterUrl="http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusNodeUrl="http://127.0.0.1:9022" \
       -mysqlConnUrl "root:root@tcp(127.0.0.1:33062)/nexus?autocommit=false"
 $ <PROJECT_ROOT>/bin/mysql_repl \
+      -nexus-cluster-url="http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
+      -nexus-node-url="http://127.0.0.1:9023" \
       -grpcPort=9123 \
-      -nexusClusterUrl="http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusNodeUrl="http://127.0.0.1:9023" \
       -mysqlConnUrl "root:root@tcp(127.0.0.1:33063)/nexus?autocommit=false"
 ```
 
@@ -141,10 +139,10 @@ At runtime, nodes belonging to an existing Nexus cluster can be removed or new n
 ```bash
 # Launch a node listening at a specific address
 $ <PROJECT_ROOT>/bin/redis_repl \
+      -nexus-cluster-url "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
+      -nexus-node-url "http://127.0.0.1:9024" \
       -grpcPort 9124 \
-      -nexusClusterUrl "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" \
-      -nexusNodeUrl "http://127.0.0.1:9024" \
-      -redisPort 6382 \
+      -redisPort 6382 
 # Add this node to the existing cluster
 $ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 addNode "http://127.0.0.1:9024"
 Current cluster members:

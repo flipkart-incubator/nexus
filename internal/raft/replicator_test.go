@@ -34,6 +34,7 @@ func TestReplicator(t *testing.T) {
 
 	t.Run("testListMembers", testListMembers)
 	t.Run("testSaveLoadData", testSaveLoadData)
+	t.Run("testSaveLoadLargeData", testSaveLoadLargeData)
 	t.Run("testLoadDuringRestarts", testLoadDuringRestarts)
 	t.Run("testForNewNexusNodeJoinLeaveCluster", testForNewNexusNodeJoinLeaveCluster)
 	t.Run("testForNodeRestart", testForNodeRestart)
@@ -42,6 +43,33 @@ func TestReplicator(t *testing.T) {
 func testListMembers(t *testing.T) {
 	members := strings.Split(clusterUrl, ",")
 	clus.assertMembers(t, members)
+}
+
+func testSaveLoadLargeData(t *testing.T) {
+	var reqs []*kvReq
+	iterations := 20
+	// Saving
+	writePeer := clus.peers[0]
+	runId := writePeer.id
+
+	for i := 0; i < iterations; i++ {
+		req1 := &kvReq{fmt.Sprintf("Key:K%d#%d", runId, i), fmt.Sprintf("Val:%d#%d", runId, i)}
+		writePeer.save(t, req1)
+		reqs = append(reqs, req1)
+		t.Logf("Write KEY : %s", req1.Key)
+	}
+
+	//assertions
+	clus.assertDB(t, reqs...)
+
+	//Read
+	for i := 0; i < iterations; i++ {
+		req1 := &kvReq{fmt.Sprintf("Key:K%d#%d", runId, i), fmt.Sprintf("Val:%d#%d", runId, i)}
+		actVal := writePeer.load(t, req1).(string)
+		if req1.Val != actVal {
+			t.Errorf("Value mismatch for peer: %d. Key: %s, Expected Value: %s, Actual Value: %s", writePeer.id, req1.Key, req1.Val, actVal)
+		}
+	}
 }
 
 func testSaveLoadData(t *testing.T) {
@@ -286,6 +314,10 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 		raft.ClusterUrl(clusterUrl),
 		raft.ReplicationTimeout(replTimeout),
 		raft.LeaseBasedReads(false),
+		raft.SnapshotCatchUpEntries(5),
+		raft.SnapshotCount(10),
+		raft.MaxWALFiles(2),
+		raft.MaxSnapFiles(2),
 	)
 	if err != nil {
 		return nil, err
