@@ -14,6 +14,20 @@ import (
 	"github.com/coreos/etcd/raft"
 )
 
+const (
+	defaultSnapshotCount int64 = 100000
+	// defaultSnapshotCatchUpEntries is the number of entries for a slow follower
+	// to catch-up after compacting the raft storage entries.
+	// We expect the follower has a millisecond level latency with the leader.
+	// The max throughput is around 10K. Keep a 5K entries is enough for helping
+	// follower to catch up.
+	defaultSnapshotCatchUpEntries int64 = 5000
+
+	defaultRaftReplTimeout = 5
+	defaultMaxWAL = 5
+	defaultMaxSNAP = 5
+)
+
 type Option func(*options) error
 
 type Options interface {
@@ -26,18 +40,26 @@ type Options interface {
 	ReplTimeout() time.Duration
 	ReadOption() raft.ReadOnlyOption
 	StatsDAddr() string
+	MaxSnapFiles() uint
+	MaxWALFiles() uint
+	SnapshotCount() uint64
+	SnapshotCatchUpEntries() uint64
 }
 
 type options struct {
-	nodeUrl         *url.URL
-	nodeUrlStr      string
-	logDir          string
-	snapDir         string
-	clusterUrl      string
-	clusterUrls     []*url.URL
-	replTimeout     time.Duration
-	leaseBasedReads bool
-	statsdAddr      string
+	nodeUrl                *url.URL
+	nodeUrlStr             string
+	logDir                 string
+	snapDir                string
+	clusterUrl             string
+	clusterUrls            []*url.URL
+	replTimeout            time.Duration
+	leaseBasedReads        bool
+	statsdAddr             string
+	maxSnapFiles           int
+	maxWALFiles            int
+	snapshotCount          int64
+	snapshotCatchUpEntries int64
 }
 
 var (
@@ -46,13 +68,19 @@ var (
 )
 
 func init() {
-	flag.StringVar(&opts.nodeUrlStr, "nexusNodeUrl", "", "Url for the Nexus service to be started on this node (format: http://<local_node>:<port_num>)")
-	flag.StringVar(&opts.logDir, "nexusLogDir", "/tmp/logs", "Dir for storing RAFT logs")
-	flag.StringVar(&opts.snapDir, "nexusSnapDir", "/tmp/snap", "Dir for storing RAFT snapshots")
-	flag.StringVar(&opts.clusterUrl, "nexusClusterUrl", "", "Comma separated list of Nexus URLs of other nodes in the cluster")
-	flag.Int64Var(&replTimeoutInSecs, "nexusReplTimeout", 5, "Replication timeout in seconds")
-	flag.BoolVar(&opts.leaseBasedReads, "nexusLeaseBasedReads", true, "Perform reads using RAFT leader leases")
-	flag.StringVar(&opts.statsdAddr, "nexusStatsDAddr", "", "StatsD server address (host:port) for relaying various metrics")
+
+	flag.StringVar(&opts.nodeUrlStr, "nexus-node-url", "", "Url for the Nexus service to be started on this node (format: http://<local_node>:<port_num>)")
+	flag.StringVar(&opts.logDir, "nexus-log-dir", "/tmp/logs", "Dir for storing RAFT logs")
+	flag.StringVar(&opts.snapDir, "nexus-snap-dir", "/tmp/snap", "Dir for storing RAFT snapshots")
+	flag.StringVar(&opts.clusterUrl, "nexus-cluster-url", "", "Comma separated list of Nexus URLs of other nodes in the cluster")
+	flag.Int64Var(&replTimeoutInSecs, "nexus-repl-timeout", defaultRaftReplTimeout, "Replication timeout in seconds")
+	flag.BoolVar(&opts.leaseBasedReads, "nexus-lease-based-reads", true, "Perform reads using RAFT leader leases")
+	flag.StringVar(&opts.statsdAddr, "nexus-statsd-addr", "", "StatsD server address (host:port) for relaying various metrics")
+
+	flag.IntVar(&opts.maxSnapFiles, "max-snapshots", defaultMaxSNAP, "Maximum number of snapshot files to retain (0 is unlimited)")
+	flag.IntVar(&opts.maxWALFiles, "max-wals", defaultMaxWAL, "Maximum number of wal files to retain (0 is unlimited)")
+	flag.Int64Var(&opts.snapshotCount, "snapshot-count", defaultSnapshotCount, "Number of committed transactions to trigger a snapshot to disk. (default 100K)")
+	flag.Int64Var(&opts.snapshotCatchUpEntries, "snapshot-catchup-entries", defaultSnapshotCatchUpEntries, "Number of entries for a slow follower to catch-up after compacting the raft storage entries (Default 5K)")
 }
 
 func OptionsFromFlags() []Option {
@@ -64,6 +92,10 @@ func OptionsFromFlags() []Option {
 		ReplicationTimeout(time.Duration(replTimeoutInSecs) * time.Second),
 		LeaseBasedReads(opts.leaseBasedReads),
 		StatsDAddr(opts.statsdAddr),
+		MaxSnapFiles(opts.maxSnapFiles),
+		MaxWALFiles(opts.maxWALFiles),
+		SnapshotCount(opts.snapshotCount),
+		SnapshotCatchUpEntries(opts.snapshotCatchUpEntries),
 	}
 }
 
@@ -254,6 +286,50 @@ func StatsDAddr(statsdAddr string) Option {
 		if statsdAddr = strings.TrimSpace(statsdAddr); statsdAddr != "" {
 			opts.statsdAddr = statsdAddr
 		}
+		return nil
+	}
+}
+
+func (this *options) MaxSnapFiles() uint {
+	return uint(this.maxSnapFiles)
+}
+
+func (this *options) MaxWALFiles() uint {
+	return uint(this.maxWALFiles)
+}
+
+func (this *options) SnapshotCount() uint64 {
+	return uint64(this.snapshotCount)
+}
+
+func (this *options) SnapshotCatchUpEntries() uint64 {
+	return uint64(this.snapshotCatchUpEntries)
+}
+
+func MaxSnapFiles(count int) Option {
+	return func(opts *options) error {
+		opts.maxSnapFiles = count
+		return nil
+	}
+}
+
+func MaxWALFiles(count int) Option {
+	return func(opts *options) error {
+		opts.maxWALFiles = count
+		return nil
+	}
+}
+
+func SnapshotCount(count int64) Option {
+	return func(opts *options) error {
+		opts.snapshotCount = count
+		return nil
+	}
+}
+
+func SnapshotCatchUpEntries(count int64) Option {
+	return func(opts *options) error {
+		opts.snapshotCatchUpEntries = count
 		return nil
 	}
 }

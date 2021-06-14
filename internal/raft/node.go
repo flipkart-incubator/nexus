@@ -42,6 +42,10 @@ import (
 	"github.com/coreos/etcd/wal/walpb"
 )
 
+const (
+	purgeFileInterval = 30 * time.Second
+)
+
 // A key-value stream backed by raft
 type raftNode struct {
 	readStateC chan raft.ReadState // to send out readState
@@ -67,7 +71,6 @@ type raftNode struct {
 
 	snapshotter *snap.Snapshotter
 
-	snapCount  uint64
 	transport  *rafthttp.Transport
 	stopc      chan struct{} // signals proposal channel closed
 	httpstopc  chan struct{} // signals http server to shutdown
@@ -75,11 +78,14 @@ type raftNode struct {
 	readOption raft.ReadOnlyOption
 	statsCli   stats.Client
 	rpeers     map[uint64]string
+
+	snapCount              uint64
+	snapshotCatchUpEntries uint64
+	maxSnapFiles           uint
+	maxWALFiles            uint
 }
 
-var defaultSnapshotCount uint64 = 10000
-
-// newRaftNode initiates a raft instance and returns a committed log entry
+// NewRaftNode initiates a raft instance and returns a committed log entry
 // channel and error channel. Proposals for log updates are sent over the
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
@@ -92,21 +98,24 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func(
 	nodeId := opts.NodeId()
 
 	rc := &raftNode{
-		readStateC:  readStateC,
-		commitC:     commitC,
-		errorC:      errorC,
-		id:          nodeId,
-		rpeers:      opts.ClusterUrls(),
-		join:        opts.Join(),
-		waldir:      opts.LogDir(),
-		snapdir:     opts.SnapDir(),
-		getSnapshot: getSnapshot,
-		snapCount:   defaultSnapshotCount,
-		stopc:       make(chan struct{}),
-		httpstopc:   make(chan struct{}),
-		httpdonec:   make(chan struct{}),
-		readOption:  opts.ReadOption(),
-		statsCli:    statsCli,
+		readStateC:             readStateC,
+		commitC:                commitC,
+		errorC:                 errorC,
+		id:                     nodeId,
+		rpeers:                 opts.ClusterUrls(),
+		join:                   opts.Join(),
+		waldir:                 opts.LogDir(),
+		snapdir:                opts.SnapDir(),
+		getSnapshot:            getSnapshot,
+		snapCount:              opts.SnapshotCount(),
+		snapshotCatchUpEntries: opts.SnapshotCatchUpEntries(),
+		stopc:                  make(chan struct{}),
+		httpstopc:              make(chan struct{}),
+		httpdonec:              make(chan struct{}),
+		readOption:             opts.ReadOption(),
+		statsCli:               statsCli,
+		maxSnapFiles:           opts.MaxSnapFiles(),
+		maxWALFiles:            opts.MaxWALFiles(),
 		// rest of structure populated after WAL replay
 	}
 
@@ -214,7 +223,7 @@ func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
 // openWAL returns a WAL ready for reading.
 func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 	if !wal.Exist(rc.waldir) {
-		if err := os.Mkdir(rc.waldir, 0750); err != nil {
+		if err := os.MkdirAll(rc.waldir, 0750); err != nil {
 			log.Fatalf("nexus.raft: [Node %x] cannot create dir for wal (%v)", rc.id, err)
 		}
 
@@ -292,7 +301,7 @@ func (rc *raftNode) genClusterID() {
 
 func (rc *raftNode) startRaft() {
 	if !fileutil.Exist(rc.snapdir) {
-		if err := os.Mkdir(rc.snapdir, 0750); err != nil {
+		if err := os.MkdirAll(rc.snapdir, 0750); err != nil {
 			log.Fatalf("nexus.raft: [Node %x] cannot create dir for snapshot (%v)", rc.id, err)
 		}
 	}
@@ -378,8 +387,6 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 	rc.appliedIndex = snapshotToSave.Metadata.Index
 }
 
-var snapshotCatchUpEntriesN uint64 = 10000
-
 func (rc *raftNode) maybeTriggerSnapshot() {
 	if rc.appliedIndex-rc.snapshotIndex <= rc.snapCount {
 		return
@@ -398,8 +405,8 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 		panic(err)
 	}
 
-	if rc.appliedIndex > snapshotCatchUpEntriesN {
-		compactIndex := rc.appliedIndex - snapshotCatchUpEntriesN
+	if rc.appliedIndex > rc.snapshotCatchUpEntries {
+		compactIndex := rc.appliedIndex - rc.snapshotCatchUpEntries
 		if err := rc.raftStorage.Compact(compactIndex); err != nil {
 			panic(err)
 		}
@@ -513,6 +520,26 @@ func newStoppableListener(addr string, stopc <-chan struct{}) (*stoppableListene
 		return nil, err
 	}
 	return &stoppableListener{ln.(*net.TCPListener), stopc}, nil
+}
+
+func (rc *raftNode) purgeFile() {
+	log.Printf("nexus.raft: [Node %x] Starting purgeFile() \n", rc.id)
+	var serrc, werrc <-chan error
+	if rc.maxSnapFiles > 0 {
+		serrc = fileutil.PurgeFile(rc.snapdir, "snap", rc.maxSnapFiles, purgeFileInterval, rc.stopc)
+	}
+	if rc.maxWALFiles > 0 {
+		werrc = fileutil.PurgeFile(rc.waldir, "wal", rc.maxWALFiles, purgeFileInterval, rc.stopc)
+	}
+
+	select {
+	case e := <-serrc:
+		log.Fatalf("nexus.raft: [Node %x] failed to purge snap file %s", rc.id, e.Error())
+	case e := <-werrc:
+		log.Fatalf("nexus.raft: [Node %x] failed to purge wal file %s", rc.id, e.Error())
+	case <-rc.stopc:
+		return
+	}
 }
 
 func (ln stoppableListener) Accept() (c net.Conn, err error) {
