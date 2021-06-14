@@ -68,7 +68,6 @@ var (
 )
 
 func init() {
-
 	flag.StringVar(&opts.nodeUrlStr, "nexus-node-url", "", "Url for the Nexus service to be started on this node (format: http://<local_node>:<port_num>)")
 	flag.StringVar(&opts.logDir, "nexus-log-dir", "/tmp/logs", "Dir for storing RAFT logs")
 	flag.StringVar(&opts.snapDir, "nexus-snap-dir", "/tmp/snap", "Dir for storing RAFT snapshots")
