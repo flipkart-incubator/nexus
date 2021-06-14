@@ -79,7 +79,7 @@ func init() {
 
 	flag.IntVar(&opts.maxSnapFiles, "max-snapshots", defaultMaxSNAP, "Maximum number of snapshot files to retain (0 is unlimited)")
 	flag.IntVar(&opts.maxWALFiles, "max-wals", defaultMaxWAL, "Maximum number of wal files to retain (0 is unlimited)")
-	flag.Int64Var(&opts.snapshotCount, "snapshot-count", defaultSnapshotCount, "Number of committed transactions to trigger a snapshot to disk. (default 100K)")
+	flag.Int64Var(&opts.snapshotCount, "snapshot-count", defaultSnapshotCount, "Number of committed transactions to trigger a snapshot to disk. (default 10K)")
 	flag.Int64Var(&opts.snapshotCatchUpEntries, "snapshot-catchup-entries", defaultSnapshotCatchUpEntries, "Number of entries for a slow follower to catch-up after compacting the raft storage entries (Default 5K)")
 }
 
