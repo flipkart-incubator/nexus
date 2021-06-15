@@ -19,6 +19,7 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
+	"golang.org/x/sync/semaphore"
 	"log"
 	"net"
 	"net/http"
@@ -79,6 +80,7 @@ type raftNode struct {
 	statsCli   stats.Client
 	rpeers     map[uint64]string
 
+	snapSem                *semaphore.Weighted
 	snapCount              uint64
 	snapshotCatchUpEntries uint64
 	maxSnapFiles           uint
@@ -116,6 +118,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func(
 		statsCli:               statsCli,
 		maxSnapFiles:           opts.MaxSnapFiles(),
 		maxWALFiles:            opts.MaxWALFiles(),
+		snapSem:                semaphore.NewWeighted(1),
 		// rest of structure populated after WAL replay
 	}
 
@@ -391,24 +394,41 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	if rc.appliedIndex-rc.snapshotIndex <= rc.snapCount {
 		return
 	}
+	if !rc.snapSem.TryAcquire(1) {
+		return //already running
+	}
+	defer rc.snapSem.Release(1)
 
 	log.Printf("nexus.raft: [Node %x] start snapshot [applied index: %d | last snapshot index: %d]", rc.id, rc.appliedIndex, rc.snapshotIndex)
 	data, err := rc.getSnapshot()
+	// TODO: what should we do if the store fails to create snapshot() ?
 	if err != nil {
-		log.Panic(err)
+		log.Fatalf("nexus.raft: [Node %x] get snapshot failed with error %v", rc.id, err)
 	}
 	snap, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, data)
 	if err != nil {
-		panic(err)
+		// the snapshot was done asynchronously with the progress of raft.
+		// raft might have already got a newer snapshot.
+		if err == raft.ErrSnapOutOfDate {
+			return
+		}
+		log.Fatalf("nexus.raft: [Node %x] create snapshot failed with error %v", rc.id, err)
 	}
+
+	log.Printf("nexus.raft: [Node %x] created snapshot [applied index: %d | last snapshot index: %d]", rc.id, rc.appliedIndex, rc.snapshotIndex)
 	if err := rc.saveSnap(snap); err != nil {
-		panic(err)
+		log.Fatalf("nexus.raft: [Node %x] save snapshot failed with error %v", rc.id, err)
 	}
 
 	if rc.appliedIndex > rc.snapshotCatchUpEntries {
 		compactIndex := rc.appliedIndex - rc.snapshotCatchUpEntries
 		if err := rc.raftStorage.Compact(compactIndex); err != nil {
-			panic(err)
+			// the compaction was done asynchronously with the progress of raft.
+			// raft log might already been compact.
+			if err == raft.ErrCompacted {
+				return
+			}
+			log.Fatalf("nexus.raft: [Node %x] compaction failed with error %v", rc.id, err)
 		}
 		log.Printf("nexus.raft: [Node %x] compacted log at index %d", rc.id, compactIndex)
 	}
@@ -468,7 +488,7 @@ func (rc *raftNode) serveChannels() {
 				rc.stop()
 				return
 			}
-			rc.maybeTriggerSnapshot()
+			go rc.maybeTriggerSnapshot() //this can happen completely off the raft sm.
 			rc.node.Advance()
 
 		case err := <-rc.transport.ErrorC:

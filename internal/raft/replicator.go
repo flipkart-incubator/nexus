@@ -241,6 +241,7 @@ func (this *replicator) readCommits() {
 			if err := this.store.Restore(snapshot.Data); err != nil {
 				log.Panic(err)
 			}
+			log.Printf("[Node %x] Snapshot load completed at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
 		} else {
 			if len(entry.Data) > 0 {
 				switch entry.Type {
