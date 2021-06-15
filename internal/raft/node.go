@@ -430,16 +430,14 @@ func (rc *raftNode) maybeTriggerSnapshot(applyDoneC <-chan struct{}) {
 		panic(err)
 	}
 
-
-	compactIndex := uint64(1)
 	if rc.appliedIndex > rc.snapshotCatchUpEntries {
-		compactIndex = rc.appliedIndex - rc.snapshotCatchUpEntries
-	}
-	if err := rc.raftStorage.Compact(compactIndex); err != nil {
-		panic(err)
+		compactIndex := rc.appliedIndex - rc.snapshotCatchUpEntries
+		if err := rc.raftStorage.Compact(compactIndex); err != nil {
+			panic(err)
+		}
+		log.Printf("nexus.raft: [Node %x] compacted log at index %d", rc.id, compactIndex)
 	}
 
-	log.Printf("nexus.raft: [Node %x] compacted log at index %d", rc.id, compactIndex)
 	rc.snapshotIndex = rc.appliedIndex
 }
 
