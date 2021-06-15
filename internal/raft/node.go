@@ -405,6 +405,7 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	if err != nil {
 		log.Fatalf("nexus.raft: [Node %x] get snapshot failed with error %v", rc.id, err)
 	}
+	//TODO: `rc.appliedIndex` might have changed by now. What should we do?
 	snap, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, data)
 	if err != nil {
 		// the snapshot was done asynchronously with the progress of raft.
