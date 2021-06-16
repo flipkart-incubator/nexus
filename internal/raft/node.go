@@ -399,14 +399,15 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	}
 	defer rc.snapSem.Release(1)
 
-	log.Printf("nexus.raft: [Node %x] start snapshot [applied index: %d | last snapshot index: %d]", rc.id, rc.appliedIndex, rc.snapshotIndex)
+	snapshotStartIndex := rc.appliedIndex
+	log.Printf("nexus.raft: [Node %x] start snapshot [applied index: %d | last snapshot index: %d]", rc.id, snapshotStartIndex, rc.snapshotIndex)
 	data, err := rc.getSnapshot()
 	// TODO: what should we do if the store fails to create snapshot() ?
 	if err != nil {
 		log.Fatalf("nexus.raft: [Node %x] get snapshot failed with error %v", rc.id, err)
 	}
 	//TODO: `rc.appliedIndex` might have changed by now. What should we do?
-	snap, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, data)
+	snap, err := rc.raftStorage.CreateSnapshot(snapshotStartIndex, &rc.confState, data)
 	if err != nil {
 		// the snapshot was done asynchronously with the progress of raft.
 		// raft might have already got a newer snapshot.
@@ -416,13 +417,13 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 		log.Fatalf("nexus.raft: [Node %x] create snapshot failed with error %v", rc.id, err)
 	}
 
-	log.Printf("nexus.raft: [Node %x] created snapshot [applied index: %d | last snapshot index: %d]", rc.id, rc.appliedIndex, rc.snapshotIndex)
+	log.Printf("nexus.raft: [Node %x] created snapshot [applied index: %d | last snapshot index: %d]", rc.id, snapshotStartIndex, rc.snapshotIndex)
 	if err := rc.saveSnap(snap); err != nil {
 		log.Fatalf("nexus.raft: [Node %x] save snapshot failed with error %v", rc.id, err)
 	}
 
-	if rc.appliedIndex > rc.snapshotCatchUpEntries {
-		compactIndex := rc.appliedIndex - rc.snapshotCatchUpEntries
+	if snapshotStartIndex > rc.snapshotCatchUpEntries {
+		compactIndex := snapshotStartIndex - rc.snapshotCatchUpEntries
 		if err := rc.raftStorage.Compact(compactIndex); err != nil {
 			// the compaction was done asynchronously with the progress of raft.
 			// raft log might already been compact.
@@ -434,7 +435,7 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 		log.Printf("nexus.raft: [Node %x] compacted log at index %d", rc.id, compactIndex)
 	}
 
-	rc.snapshotIndex = rc.appliedIndex
+	rc.snapshotIndex = snapshotStartIndex
 }
 
 func (rc *raftNode) publishReadStates(readStates []raft.ReadState) bool {
