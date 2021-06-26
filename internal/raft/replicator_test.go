@@ -470,6 +470,10 @@ func (this *inMemKVStore) Close() error {
 	return nil
 }
 
+func (this *inMemKVStore) GetLastAppliedEntry() (db.RaftEntry, error) {
+	return db.RaftEntry{}, errors.New("not implemented")
+}
+
 func (this *inMemKVStore) Load(data []byte) ([]byte, error) {
 	this.mu.Lock()
 	defer this.mu.Unlock()
@@ -485,7 +489,7 @@ func (this *inMemKVStore) Load(data []byte) ([]byte, error) {
 	}
 }
 
-func (this *inMemKVStore) Save(data []byte) ([]byte, error) {
+func (this *inMemKVStore) Save(_ db.RaftEntry, data []byte) ([]byte, error) {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	if kvReq, err := fromBytes(data); err != nil {

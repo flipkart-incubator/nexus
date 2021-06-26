@@ -69,7 +69,7 @@ func initStatsD(opts pkg_raft.Options) stats.Client {
 
 func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
 	statsCli := initStatsD(options)
-	raftNode := NewRaftNode(options, statsCli, store.Backup)
+	raftNode := NewRaftNode(options, statsCli, store)
 	repl := &replicator{
 		node:            raftNode,
 		store:           store,
@@ -245,13 +245,14 @@ func (this *replicator) readCommits() {
 			if len(entry.Data) > 0 {
 				switch entry.Type {
 				case raftpb.EntryNormal:
-					var repl_req internalNexusRequest
-					if err := repl_req.unmarshal(entry.Data); err != nil {
+					var replReq internalNexusRequest
+					if err := replReq.unmarshal(entry.Data); err != nil {
 						log.Fatal(err)
 					} else {
-						repl_res := internalNexusResponse{}
-						repl_res.Res, repl_res.Err = this.store.Save(repl_req.Req)
-						this.waiter.Trigger(repl_req.ID, &repl_res)
+						replRes := internalNexusResponse{}
+						raftEntry := db.RaftEntry{Index: entry.Index, Term: entry.Term}
+						replRes.Res, replRes.Err = this.store.Save(raftEntry, replReq.Req)
+						this.waiter.Trigger(replReq.ID, &replRes)
 					}
 				case raftpb.EntryConfChange:
 					var cc raftpb.ConfChange

@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"log"
@@ -74,6 +75,11 @@ func NewMySQLDB(datasourceName string) (*mysqlStore, error) {
 
 func (this *mysqlStore) Close() error {
 	return this.db.Close()
+}
+
+// TODO: implement this correctly
+func (this *mysqlStore) GetLastAppliedEntry() (db.RaftEntry, error) {
+	return db.RaftEntry{}, errors.New("not implemented")
 }
 
 const txTimeout = 20 * time.Second // TODO: Should be configurable
@@ -151,17 +157,17 @@ func (this *mysqlStore) Load(data []byte) ([]byte, error) {
 	}
 }
 
-func (this *mysqlStore) Save(data []byte) ([]byte, error) {
-	var save_req SaveRequest
-	if err := save_req.FromBytes(data); err != nil {
+func (this *mysqlStore) Save(_ db.RaftEntry, data []byte) ([]byte, error) {
+	var saveReq SaveRequest
+	if err := saveReq.FromBytes(data); err != nil {
 		return nil, err
 	} else {
-		sql := save_req.StmtTmpl
-		if tmpl, err := template.New("sql_tmpl").Parse(sql); err != nil {
+		sqlTmpl := saveReq.StmtTmpl
+		if tmpl, err := template.New("sql_tmpl").Parse(sqlTmpl); err != nil {
 			return nil, err
 		} else {
 			var buf bytes.Buffer
-			if err := tmpl.Execute(&buf, save_req.Params); err != nil {
+			if err := tmpl.Execute(&buf, saveReq.Params); err != nil {
 				return nil, err
 			} else {
 				if res, err := this.save(buf.String()); err != nil {

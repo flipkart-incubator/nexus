@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"strconv"
@@ -20,12 +21,17 @@ type redisStore struct {
 }
 
 func (this *redisStore) Close() error {
-	this.statsCli.Close()
+	_ = this.statsCli.Close()
 	return this.cli.Close()
 }
 
 func isRedisError(err error) bool {
 	return err != nil && !strings.HasSuffix(strings.TrimSpace(err.Error()), "nil")
+}
+
+func (this *redisStore) GetLastAppliedEntry() (db.RaftEntry, error) {
+	// TODO: Implement this correctly
+	return db.RaftEntry{}, errors.New("not implemented")
 }
 
 func (this *redisStore) Load(data []byte) ([]byte, error) {
@@ -34,7 +40,7 @@ func (this *redisStore) Load(data []byte) ([]byte, error) {
 	return this.evalLua(luaScript)
 }
 
-func (this *redisStore) Save(data []byte) ([]byte, error) {
+func (this *redisStore) Save(_ db.RaftEntry, data []byte) ([]byte, error) {
 	defer this.statsCli.Timing("redis_save.latency.ms", time.Now())
 	luaScript := string(data)
 	return this.evalLua(luaScript)

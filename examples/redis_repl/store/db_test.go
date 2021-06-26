@@ -35,7 +35,7 @@ func initRedisStore() {
 
 func insertKey(t *testing.T, key, val string, dbIdx int) {
 	saveReq := fmt.Sprintf("redis.call('select', '%d') return redis.call('set', '%s', '%s')", dbIdx, key, val)
-	if saveRes, err := store.Save([]byte(saveReq)); err != nil {
+	if saveRes, err := store.Save(db.RaftEntry{}, []byte(saveReq)); err != nil {
 		t.Fatal(err)
 	} else {
 		t.Logf("Insert response received: %s", saveRes)
@@ -44,7 +44,7 @@ func insertKey(t *testing.T, key, val string, dbIdx int) {
 
 func deleteKey(t *testing.T, key string, dbIdx int) {
 	delReq := fmt.Sprintf("redis.call('select', '%d') return redis.call('del', '%s')", dbIdx, key)
-	if delRes, err := store.Save([]byte(delReq)); err != nil {
+	if delRes, err := store.Save(db.RaftEntry{}, []byte(delReq)); err != nil {
 		t.Fatal(err)
 	} else {
 		t.Logf("Delete response received: %s", delRes)
@@ -53,7 +53,7 @@ func deleteKey(t *testing.T, key string, dbIdx int) {
 
 func assertKey(t *testing.T, key, expVal string, dbIdx int) {
 	loadReq := fmt.Sprintf("redis.call('select', '%d') return redis.call('get', '%s')", dbIdx, key)
-	if loadRes, err := store.Save([]byte(loadReq)); err != nil {
+	if loadRes, err := store.Save(db.RaftEntry{}, []byte(loadReq)); err != nil {
 		t.Fatal(err)
 	} else {
 		if string(loadRes) != expVal {
