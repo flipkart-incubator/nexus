@@ -1,9 +1,9 @@
 redis1: redis-server redis1.conf
 redis2: redis-server redis2.conf
 redis3: redis-server redis3.conf
-#nexus1: go run main.go -grpcPort 9121 -redisPort 6379  -nexus-node-url "http://127.0.0.1:9021" -nexus-cluster-url "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" -nexus-log-dir /tmp/nexus_redis/1/logs -nexus-snap-dir /tmp/nexus_redis/1/snap -nexus-snapshot-count 100 -nexus-snapshot-catchup-entries 5
-#nexus2: go run main.go -grpcPort 9122 -redisPort 6380  -nexus-node-url "http://127.0.0.1:9022" -nexus-cluster-url "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" -nexus-log-dir /tmp/nexus_redis/2/logs -nexus-snap-dir /tmp/nexus_redis/2/snap -nexus-snapshot-count 100 -nexus-snapshot-catchup-entries 5
-#nexus3: go run main.go -grpcPort 9123 -redisPort 6381  -nexus-node-url "http://127.0.0.1:9023" -nexus-cluster-url "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" -nexus-log-dir /tmp/nexus_redis/3/logs -nexus-snap-dir /tmp/nexus_redis/3/snap -nexus-snapshot-count 100 -nexus-snapshot-catchup-entries 5
+nexus1: go run main.go -grpcPort 9121 -redisPort 6379  -nexus-node-url "http://127.0.0.1:9021" -nexus-cluster-url "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" -nexus-log-dir /tmp/nexus_redis/1/logs -nexus-snap-dir /tmp/nexus_redis/1/snap -nexus-snapshot-count 100 -nexus-snapshot-catchup-entries 5
+nexus2: go run main.go -grpcPort 9122 -redisPort 6380  -nexus-node-url "http://127.0.0.1:9022" -nexus-cluster-url "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" -nexus-log-dir /tmp/nexus_redis/2/logs -nexus-snap-dir /tmp/nexus_redis/2/snap -nexus-snapshot-count 100 -nexus-snapshot-catchup-entries 5
+nexus3: go run main.go -grpcPort 9123 -redisPort 6381  -nexus-node-url "http://127.0.0.1:9023" -nexus-cluster-url "http://127.0.0.1:9021,http://127.0.0.1:9022,http://127.0.0.1:9023" -nexus-log-dir /tmp/nexus_redis/3/logs -nexus-snap-dir /tmp/nexus_redis/3/snap -nexus-snapshot-count 100 -nexus-snapshot-catchup-entries 5
 
 # run using `goreman start`
 # note : do-not use the snapshot-count/catchup-entries value in this file as production values. This are specifically lowered for testing.
