@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"github.com/flipkart-incubator/nexus/pkg/db"
 	"os"
 	"testing"
 	"time"
@@ -90,7 +91,7 @@ func TestBackupRestore(t *testing.T) {
 	}
 
 	// backup the DB
-	bkp, err := store.Backup()
+	bkp, err := store.Backup(db.SnapshotState{})
 	if err != nil {
 		t.Fatal(err)
 	}

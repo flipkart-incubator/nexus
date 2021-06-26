@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"github.com/flipkart-incubator/nexus/pkg/db"
 	"strconv"
 	"strings"
 	"time"
@@ -105,7 +106,7 @@ func (this *redisStore) loadAllData(redis_data_set []map[string][]byte, replacea
 	return nil
 }
 
-func (this *redisStore) Backup() ([]byte, error) {
+func (this *redisStore) Backup(_ db.SnapshotState) ([]byte, error) {
 	defer this.statsCli.Timing("redis_backup.latency.ms", time.Now())
 	if data, err := this.extractAllData(); isRedisError(err) {
 		this.statsCli.Incr("backup.extract.error", 1)

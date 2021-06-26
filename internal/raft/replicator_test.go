@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"github.com/flipkart-incubator/nexus/pkg/db"
 	"os"
 	"reflect"
 	"sort"
@@ -500,7 +501,7 @@ func (this *inMemKVStore) Save(data []byte) ([]byte, error) {
 	}
 }
 
-func (this *inMemKVStore) Backup() ([]byte, error) {
+func (this *inMemKVStore) Backup(_ db.SnapshotState) ([]byte, error) {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	var buf bytes.Buffer

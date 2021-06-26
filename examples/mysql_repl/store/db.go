@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/gob"
 	"fmt"
+	"github.com/flipkart-incubator/nexus/pkg/db"
 	"log"
 	"text/template"
 	"time"
@@ -176,7 +177,7 @@ func (this *mysqlStore) Save(data []byte) ([]byte, error) {
 	}
 }
 
-func (this *mysqlStore) Backup() ([]byte, error) {
+func (this *mysqlStore) Backup(_ db.SnapshotState) ([]byte, error) {
 	return nil, nil
 }
 

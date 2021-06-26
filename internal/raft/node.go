@@ -19,6 +19,7 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
+	"github.com/flipkart-incubator/nexus/pkg/db"
 	"log"
 	"net"
 	"net/http"
@@ -57,7 +58,7 @@ type raftNode struct {
 	join        bool   // node is joining an existing cluster
 	waldir      string // path to WAL directory
 	snapdir     string // path to snapshot directory
-	getSnapshot func() ([]byte, error)
+	getSnapshot func(db.SnapshotState) ([]byte, error)
 	lastIndex   uint64 // index of log at start
 
 	confState     raftpb.ConfState
@@ -90,7 +91,8 @@ type raftNode struct {
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries. To shutdown, close proposeC and read errorC.
-func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func() ([]byte, error)) *raftNode {
+func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client,
+	getSnapshot func(db.SnapshotState) ([]byte, error)) *raftNode {
 
 	readStateC := make(chan raft.ReadState)
 	commitC := make(chan *raftpb.Entry)
@@ -393,15 +395,15 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	}
 
 	log.Printf("nexus.raft: [Node %x] start snapshot [applied index: %d | last snapshot index: %d]", rc.id, rc.appliedIndex, rc.snapshotIndex)
-	data, err := rc.getSnapshot()
+	data, err := rc.getSnapshot(db.SnapshotState{SnapshotIndex: rc.snapshotIndex, AppliedIndex: rc.appliedIndex})
 	if err != nil {
 		log.Panic(err)
 	}
-	snap, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, data)
+	snapshot, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, data)
 	if err != nil {
 		panic(err)
 	}
-	if err := rc.saveSnap(snap); err != nil {
+	if err := rc.saveSnap(snapshot); err != nil {
 		panic(err)
 	}
 
