@@ -57,7 +57,7 @@ type raftNode struct {
 
 	//proposeC    <-chan *raftpb.Entry            // proposed messages (k,v)
 	readStateC chan raft.ReadState // to send out readState
-	commitC    chan *commit  // entries committed to log (k,v)
+	commitC    chan *commit        // entries committed to log (k,v)
 	errorC     chan error          // errors from raft session
 
 	id          uint64 // client ID for raft session
@@ -77,7 +77,7 @@ type raftNode struct {
 	raftStorage *raft.MemoryStorage
 	wal         *wal.WAL
 
-	snapshotter *snap.Snapshotter
+	snapshotter      *snap.Snapshotter
 	snapshotterReady chan *snap.Snapshotter // signals when snapshotter is ready
 
 	transport  *rafthttp.Transport
@@ -111,25 +111,25 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func(
 
 	rc := &raftNode{
 		//proposeC:    proposeC,
-		readStateC:  readStateC,
-		commitC:     commitC,
-		errorC:      errorC,
-		id:          nodeId,
-		rpeers:      opts.ClusterUrls(),
-		join:        opts.Join(),
-		waldir:      opts.LogDir(),
-		snapdir:     opts.SnapDir(),
-		getSnapshot: getSnapshot,
-		snapCount:   opts.SnapshotCount(),
-		stopc:       make(chan struct{}),
-		httpstopc:   make(chan struct{}),
-		httpdonec:   make(chan struct{}),
-		readOption:  opts.ReadOption(),
-		statsCli:    statsCli,
-		maxSnapFiles:           opts.MaxSnapFiles(),
-		maxWALFiles:            opts.MaxWALFiles(),
+		readStateC:       readStateC,
+		commitC:          commitC,
+		errorC:           errorC,
+		id:               nodeId,
+		rpeers:           opts.ClusterUrls(),
+		join:             opts.Join(),
+		waldir:           opts.LogDir(),
+		snapdir:          opts.SnapDir(),
+		getSnapshot:      getSnapshot,
+		snapCount:        opts.SnapshotCount(),
+		stopc:            make(chan struct{}),
+		httpstopc:        make(chan struct{}),
+		httpdonec:        make(chan struct{}),
+		readOption:       opts.ReadOption(),
+		statsCli:         statsCli,
+		maxSnapFiles:     opts.MaxSnapFiles(),
+		maxWALFiles:      opts.MaxWALFiles(),
 		snapshotterReady: make(chan *snap.Snapshotter, 1),
-		logger: zap.NewExample(),
+		logger:           zap.NewExample(),
 		// rest of structure populated after WAL replay
 	}
 
@@ -142,8 +142,8 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func(
 
 func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
 	walSnap := walpb.Snapshot{
-		Index: snap.Metadata.Index,
-		Term:  snap.Metadata.Term,
+		Index:     snap.Metadata.Index,
+		Term:      snap.Metadata.Term,
 		ConfState: &snap.Metadata.ConfState,
 	}
 	// save the snapshot file before writing the snapshot to the wal.
@@ -343,14 +343,14 @@ func (rc *raftNode) startRaft() {
 		rpeers = append(rpeers, raft.Peer{ID: id, Context: []byte(peer)})
 	}
 	c := &raft.Config{
-		ID:              rc.id,
-		ElectionTick:    10,
-		HeartbeatTick:   1,
-		Storage:         rc.raftStorage,
-		MaxSizePerMsg:   1024 * 1024,
-		MaxInflightMsgs: 256,
-		ReadOnlyOption:  rc.readOption,
-		CheckQuorum:     rc.readOption == raft.ReadOnlyLeaseBased,
+		ID:                        rc.id,
+		ElectionTick:              10,
+		HeartbeatTick:             1,
+		Storage:                   rc.raftStorage,
+		MaxSizePerMsg:             1024 * 1024,
+		MaxInflightMsgs:           256,
+		ReadOnlyOption:            rc.readOption,
+		CheckQuorum:               rc.readOption == raft.ReadOnlyLeaseBased,
 		MaxUncommittedEntriesSize: 1 << 30,
 	}
 
@@ -411,7 +411,6 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 	rc.snapshotIndex = snapshotToSave.Metadata.Index
 	rc.appliedIndex = snapshotToSave.Metadata.Index
 }
-
 
 func (rc *raftNode) maybeTriggerSnapshot(applyDoneC <-chan struct{}) {
 	if rc.appliedIndex-rc.snapshotIndex <= rc.snapCount {

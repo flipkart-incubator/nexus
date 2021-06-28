@@ -24,8 +24,8 @@ const (
 	defaultSnapshotCatchUpEntries int64 = 5000
 
 	defaultRaftReplTimeout = 5
-	defaultMaxWAL = 5
-	defaultMaxSNAP = 5
+	defaultMaxWAL          = 5
+	defaultMaxSNAP         = 5
 )
 
 type Option func(*options) error
