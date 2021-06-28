@@ -111,25 +111,26 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func(
 
 	rc := &raftNode{
 		//proposeC:    proposeC,
-		readStateC:       readStateC,
-		commitC:          commitC,
-		errorC:           errorC,
-		id:               nodeId,
-		rpeers:           opts.ClusterUrls(),
-		join:             opts.Join(),
-		waldir:           opts.LogDir(),
-		snapdir:          opts.SnapDir(),
-		getSnapshot:      getSnapshot,
-		snapCount:        opts.SnapshotCount(),
-		stopc:            make(chan struct{}),
-		httpstopc:        make(chan struct{}),
-		httpdonec:        make(chan struct{}),
-		readOption:       opts.ReadOption(),
-		statsCli:         statsCli,
-		maxSnapFiles:     opts.MaxSnapFiles(),
-		maxWALFiles:      opts.MaxWALFiles(),
-		snapshotterReady: make(chan *snap.Snapshotter, 1),
-		logger:           zap.NewExample(),
+		readStateC:             readStateC,
+		commitC:                commitC,
+		errorC:                 errorC,
+		id:                     nodeId,
+		rpeers:                 opts.ClusterUrls(),
+		join:                   opts.Join(),
+		waldir:                 opts.LogDir(),
+		snapdir:                opts.SnapDir(),
+		getSnapshot:            getSnapshot,
+		snapCount:              opts.SnapshotCount(),
+		snapshotCatchUpEntries: opts.SnapshotCatchUpEntries(),
+		stopc:                  make(chan struct{}),
+		httpstopc:              make(chan struct{}),
+		httpdonec:              make(chan struct{}),
+		readOption:             opts.ReadOption(),
+		statsCli:               statsCli,
+		maxSnapFiles:           opts.MaxSnapFiles(),
+		maxWALFiles:            opts.MaxWALFiles(),
+		snapshotterReady:       make(chan *snap.Snapshotter, 1),
+		logger:                 zap.NewExample(),
 		// rest of structure populated after WAL replay
 	}
 
@@ -294,7 +295,6 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 
 	// append to storage so raft starts at the right place in log
 	rc.raftStorage.Append(ents)
-
 	return w
 }
 

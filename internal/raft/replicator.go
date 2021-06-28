@@ -80,6 +80,7 @@ func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
 		statsCli:        statsCli,
 		opts:            options,
 	}
+
 	return repl
 }
 
@@ -88,9 +89,10 @@ func (this *replicator) Id() uint64 {
 }
 
 func (this *replicator) Start() {
+	this.node.startRaft()
+	this.restoreFromSnapshot()
 	go this.readCommits()
 	go this.readReadStates()
-	this.node.startRaft()
 	go this.node.purgeFile()
 }
 
@@ -225,22 +227,27 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 	}
 }
 
+func (this *replicator) restoreFromSnapshot()   {
+	snapshot, err := this.node.snapshotter.Load()
+	if err == snap.ErrNoSnapshot {
+		log.Printf("[Node %x] WARNING - Received no snapshot error", this.node.id)
+		return
+	}
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Printf("[Node %x] Loading snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
+	if err := this.store.Restore(snapshot.Data); err != nil {
+		log.Panic(err)
+	}
+	log.Printf("[Node %x] Restored snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
+}
+
 func (this *replicator) readCommits() {
 	for _commit := range this.node.commitC {
 		if _commit == nil {
 			log.Printf("[Node %x] Received a message in the commit channel with no data", this.node.id)
-			snapshot, err := this.node.snapshotter.Load()
-			if err == snap.ErrNoSnapshot {
-				log.Printf("[Node %x] WARNING - Received no snapshot error", this.node.id)
-				continue
-			}
-			if err != nil {
-				log.Panic(err)
-			}
-			log.Printf("[Node %x] Loading snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
-			if err := this.store.Restore(snapshot.Data); err != nil {
-				log.Panic(err)
-			}
+			this.restoreFromSnapshot()
 			continue
 		}
 
