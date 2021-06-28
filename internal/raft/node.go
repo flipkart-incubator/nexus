@@ -183,9 +183,15 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) (<-chan struct{}, bool) 
 		return nil, true
 	}
 
+	data := make([]raftpb.Entry, 0, len(ents))
 	for i := range ents {
 		switch ents[i].Type {
 		case raftpb.EntryNormal: // nothing to do but leaving for clarity
+			if len(ents[i].Data) == 0 {
+				// ignore empty messages
+				break
+			}
+			data = append(data, ents[i])
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
 			cc.Unmarshal(ents[i].Data)
@@ -212,11 +218,15 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) (<-chan struct{}, bool) 
 		}
 	}
 
-	var applyDoneC = make(chan struct{}, 1)
-	select {
-		case rc.commitC <- &commit{ents, applyDoneC}:
+	var applyDoneC chan struct{}
+
+	if len(data) > 0 {
+		applyDoneC = make(chan struct{}, 1)
+		select {
+		case rc.commitC <- &commit{data, applyDoneC}:
 		case <-rc.stopc:
 			return nil, false
+		}
 	}
 
 	// after commit, update appliedIndex
