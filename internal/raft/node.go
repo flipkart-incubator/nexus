@@ -444,7 +444,12 @@ func (rc *raftNode) serveChannels() {
 	}
 	rc.confState = snap.Metadata.ConfState
 	rc.snapshotIndex = snap.Metadata.Index
-	rc.appliedIndex = snap.Metadata.Index
+	// Set appliedIndex only if its not already initialised
+	// Note that we also set appliedIndex during init from
+	// storage supplied value.
+	if rc.appliedIndex == 0 {
+		rc.appliedIndex = snap.Metadata.Index
+	}
 
 	defer rc.wal.Close()
 

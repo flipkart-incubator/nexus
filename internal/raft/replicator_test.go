@@ -10,6 +10,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -315,8 +316,8 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 		raft.ClusterUrl(clusterUrl),
 		raft.ReplicationTimeout(replTimeout),
 		raft.LeaseBasedReads(false),
-		raft.SnapshotCatchUpEntries(5),
-		raft.SnapshotCount(10),
+		raft.SnapshotCatchUpEntries(100),
+		raft.SnapshotCount(100),
 		raft.MaxWALFiles(2),
 		raft.MaxSnapFiles(2),
 	)
@@ -329,8 +330,8 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 }
 
 func newPeer(id int) (*peer, error) {
-	db := newInMemKVStore()
-	return newPeerWithDB(id, db)
+	memKVStore := newInMemKVStore()
+	return newPeerWithDB(id, memKVStore)
 }
 
 func newJoiningPeer(peerAddr string) (*peer, error) {
@@ -345,9 +346,9 @@ func newJoiningPeer(peerAddr string) (*peer, error) {
 	if err != nil {
 		return nil, err
 	} else {
-		db := newInMemKVStore()
-		repl := NewReplicator(db, opts)
-		return &peer{repl.node.id, db, repl}, nil
+		memKVStore := newInMemKVStore()
+		repl := NewReplicator(memKVStore, opts)
+		return &peer{repl.node.id, memKVStore, repl}, nil
 	}
 }
 
@@ -460,18 +461,19 @@ func (this *kvReq) toBytes() ([]byte, error) {
 type inMemKVStore struct {
 	mu      sync.Mutex
 	content map[string]interface{}
+	currEntry db.RaftEntry
 }
 
 func newInMemKVStore() *inMemKVStore {
 	return &inMemKVStore{content: make(map[string]interface{})}
 }
 
-func (this *inMemKVStore) Close() error {
-	return nil
+func (this *inMemKVStore) Close() (_ error) {
+	return
 }
 
 func (this *inMemKVStore) GetLastAppliedEntry() (db.RaftEntry, error) {
-	return db.RaftEntry{}, errors.New("not implemented")
+	return this.currEntry, nil
 }
 
 func (this *inMemKVStore) Load(data []byte) ([]byte, error) {
@@ -489,7 +491,7 @@ func (this *inMemKVStore) Load(data []byte) ([]byte, error) {
 	}
 }
 
-func (this *inMemKVStore) Save(_ db.RaftEntry, data []byte) ([]byte, error) {
+func (this *inMemKVStore) Save(raftEntry db.RaftEntry, data []byte) ([]byte, error) {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	if kvReq, err := fromBytes(data); err != nil {
@@ -500,14 +502,26 @@ func (this *inMemKVStore) Save(_ db.RaftEntry, data []byte) ([]byte, error) {
 			return nil, errors.New(fmt.Sprintf("Given key: %s already exists", key))
 		} else {
 			this.content[key] = kvReq.Val
+			this.currEntry = raftEntry
 			return nil, nil
 		}
 	}
 }
 
+const (
+	raftTermKey = "raft.term"
+	raftIndexKey = "raft.index"
+)
+
 func (this *inMemKVStore) Backup(_ db.SnapshotState) ([]byte, error) {
 	this.mu.Lock()
 	defer this.mu.Unlock()
+	this.content[raftTermKey] = strconv.Itoa(int(this.currEntry.Term))
+	this.content[raftIndexKey] = strconv.Itoa(int(this.currEntry.Index))
+	defer func() {
+		delete(this.content, raftTermKey)
+		delete(this.content, raftIndexKey)
+	} ()
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(this.content); err != nil {
 		return nil, err
@@ -523,6 +537,11 @@ func (this *inMemKVStore) Restore(data []byte) error {
 	if err := gob.NewDecoder(buf).Decode(&content); err != nil {
 		return err
 	} else {
+		term, _ := strconv.Atoi(content[raftTermKey].(string))
+		index, _ := strconv.Atoi(content[raftIndexKey].(string))
+		this.currEntry = db.RaftEntry{Term: uint64(term), Index: uint64(index)}
+		delete(content, raftTermKey)
+		delete(content, raftIndexKey)
 		this.content = content
 		return nil
 	}

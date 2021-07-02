@@ -26,6 +26,7 @@ var (
 	stopChan   <-chan os.Signal
 	redisHost  string
 	redisPort  uint
+	metadataDB uint
 	grpcPort   uint
 	statsdAddr string
 )
@@ -34,6 +35,7 @@ func init() {
 	flag.UintVar(&grpcPort, "grpcPort", 0, "Port on which Nexus GRPC server listens")
 	flag.StringVar(&redisHost, "redisHost", "127.0.0.1", "Redis host")
 	flag.UintVar(&redisPort, "redisPort", 6379, "Redis port")
+	flag.UintVar(&metadataDB, "metadataDB", 13, "DB index for storing RAFT metadata")
 	flag.StringVar(&statsdAddr, "statsdAddr", "", "StatsD service address in host:port format")
 	stopChan = setupSignalNotify()
 }
@@ -60,9 +62,9 @@ func initStatsD() stats.Client {
 func main() {
 	flag.Parse()
 	validateFlags()
-	stats := initStatsD()
+	statsd := initStatsD()
 
-	if db, err := store.NewRedisDB(redisHost, redisPort, stats); err != nil {
+	if db, err := store.NewRedisDB(redisHost, redisPort, metadataDB, statsd); err != nil {
 		panic(err)
 	} else {
 		nexusOpts := raft.OptionsFromFlags()
@@ -74,7 +76,7 @@ func main() {
 			go ns.ListenAndServe()
 			sig := <-stopChan
 			log.Printf("[WARN] Caught signal: %v. Shutting down...", sig)
-			ns.Close()
+			_ = ns.Close()
 		}
 	}
 }

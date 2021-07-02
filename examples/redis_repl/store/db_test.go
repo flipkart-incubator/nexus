@@ -18,6 +18,7 @@ const (
 	keyPref   = "NEXUS_TEST"
 	value     = "hello_world"
 	redisDB   = 2
+	metadataDB = 13
 )
 
 func TestMain(m *testing.M) {
@@ -26,7 +27,7 @@ func TestMain(m *testing.M) {
 }
 
 func initRedisStore() {
-	if rs, err := NewRedisDB(redisHost, redisPort, stats.NewNoOpClient()); err != nil {
+	if rs, err := NewRedisDB(redisHost, redisPort, metadataDB, stats.NewNoOpClient()); err != nil {
 		panic(err)
 	} else {
 		store = rs
@@ -35,7 +36,7 @@ func initRedisStore() {
 
 func insertKey(t *testing.T, key, val string, dbIdx int) {
 	saveReq := fmt.Sprintf("redis.call('select', '%d') return redis.call('set', '%s', '%s')", dbIdx, key, val)
-	if saveRes, err := store.Save(db.RaftEntry{}, []byte(saveReq)); err != nil {
+	if saveRes, err := store.Save(db.RaftEntry{Term: 2, Index: 10}, []byte(saveReq)); err != nil {
 		t.Fatal(err)
 	} else {
 		t.Logf("Insert response received: %s", saveRes)

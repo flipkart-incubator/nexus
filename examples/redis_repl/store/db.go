@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/gob"
-	"errors"
 	"fmt"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"strconv"
@@ -18,6 +17,7 @@ import (
 type redisStore struct {
 	cli      *redis.Client
 	statsCli stats.Client
+	metaDB   uint
 }
 
 func (this *redisStore) Close() error {
@@ -29,9 +29,21 @@ func isRedisError(err error) bool {
 	return err != nil && !strings.HasSuffix(strings.TrimSpace(err.Error()), "nil")
 }
 
+const (
+	RaftStateKey = "raft.state"
+	RaftStateTermKey = "term"
+	RaftStateIndexKey = "index"
+)
+
 func (this *redisStore) GetLastAppliedEntry() (db.RaftEntry, error) {
-	// TODO: Implement this correctly
-	return db.RaftEntry{}, errors.New("not implemented")
+	metaCli := selectDB(int(this.metaDB), this.cli)
+	if result, err := metaCli.HGetAll(RaftStateKey).Result(); err != nil {
+		return db.RaftEntry{}, err
+	} else {
+		term, _ := strconv.ParseUint(result[RaftStateTermKey], 10, 64)
+		index, _ := strconv.ParseUint(result[RaftStateIndexKey], 10, 64)
+		return db.RaftEntry{Term: term, Index: index}, nil
+	}
 }
 
 func (this *redisStore) Load(data []byte) ([]byte, error) {
@@ -40,9 +52,22 @@ func (this *redisStore) Load(data []byte) ([]byte, error) {
 	return this.evalLua(luaScript)
 }
 
-func (this *redisStore) Save(_ db.RaftEntry, data []byte) ([]byte, error) {
+const LUAScript =
+`
+redis.call('select', '%d')
+redis.call('hset', '%s', '%s', '%d')
+redis.call('hset', '%s', '%s', '%d')
+%s
+`
+
+func (this *redisStore) Save(raftState db.RaftEntry, data []byte) ([]byte, error) {
 	defer this.statsCli.Timing("redis_save.latency.ms", time.Now())
-	luaScript := string(data)
+	luaSnippet := string(data)
+	luaScript := fmt.Sprintf(LUAScript,
+		this.metaDB,										/* switch to metadata DB */
+		RaftStateKey, RaftStateTermKey, raftState.Term,		/* insert RAFT state term */
+		RaftStateKey, RaftStateIndexKey, raftState.Index,	/* insert RAFT state index */
+		luaSnippet)											/* user supplied Lua snippet */
 	return this.evalLua(luaScript)
 }
 
@@ -63,10 +88,10 @@ func (this *redisStore) evalLua(luaScript string) ([]byte, error) {
 func (this *redisStore) extractAllData() ([]map[string][]byte, error) {
 	maxDBs := this.getMaxDBIdx()
 	result := make([]map[string][]byte, maxDBs)
-	for db := 0; db < maxDBs; db++ {
-		cli := selectDB(db, this.cli)
+	for dbIndex := 0; dbIndex < maxDBs; dbIndex++ {
+		cli := selectDB(dbIndex, this.cli)
 		cursor := uint64(0)
-		result[db] = make(map[string][]byte)
+		result[dbIndex] = make(map[string][]byte)
 
 		for {
 			keys, new_cursor, err := cli.Scan(cursor, "", 1000).Result()
@@ -77,7 +102,7 @@ func (this *redisStore) extractAllData() ([]map[string][]byte, error) {
 				if key_data, err := cli.Dump(key).Result(); isRedisError(err) {
 					return nil, err
 				} else {
-					result[db][key] = []byte(key_data)
+					result[dbIndex][key] = []byte(key_data)
 				}
 			}
 			if new_cursor == 0 {
@@ -182,10 +207,10 @@ func connect(redis_host string, redis_port uint) (*redis.Client, error) {
 	return client, err
 }
 
-func NewRedisDB(host string, port uint, statsCli stats.Client) (*redisStore, error) {
+func NewRedisDB(host string, port, metadataDB uint, statsCli stats.Client) (*redisStore, error) {
 	if cli, err := connect(host, port); err != nil {
 		return nil, err
 	} else {
-		return &redisStore{cli, statsCli}, nil
+		return &redisStore{cli, statsCli, metadataDB}, nil
 	}
 }
