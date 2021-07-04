@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"github.com/flipkart-incubator/nexus/pkg/api"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"strconv"
 	"strings"
@@ -30,9 +31,10 @@ func isRedisError(err error) bool {
 }
 
 const (
-	RaftStateKey = "raft.state"
-	RaftStateTermKey = "term"
+	RaftStateKey      = "raft.state"
+	RaftStateTermKey  = "term"
 	RaftStateIndexKey = "index"
+	DBIndexKey        = "db.index"
 )
 
 func (this *redisStore) GetLastAppliedEntry() (db.RaftEntry, error) {
@@ -46,29 +48,71 @@ func (this *redisStore) GetLastAppliedEntry() (db.RaftEntry, error) {
 	}
 }
 
-func (this *redisStore) Load(data []byte) ([]byte, error) {
-	defer this.statsCli.Timing("redis_load.latency.ms", time.Now())
-	luaScript := string(data)
-	return this.evalLua(luaScript)
-}
-
-const LUAScript =
+const (
+	LoadLUAScript = `
+redis.call('select', '%d')
+%s
 `
+	SaveLUAScript = `
 redis.call('select', '%d')
 redis.call('hset', '%s', '%s', '%d')
 redis.call('hset', '%s', '%s', '%d')
+redis.call('select', '%d')
 %s
 `
+)
+
+func (this *redisStore) Load(data []byte) ([]byte, error) {
+	defer this.statsCli.Timing("redis_load.latency.ms", time.Now())
+
+	req := new(api.LoadRequest)
+	err := req.Decode(data)
+	if err != nil {
+		return nil, err
+	}
+
+	userDB, err := this.readUserDB(req.Args)
+	if err != nil {
+		return nil, err
+	}
+
+	luaSnippet := string(req.Data)
+	luaScript := fmt.Sprintf(LoadLUAScript,
+		userDB,			/* switch to user DB */
+		luaSnippet)		/* user supplied Lua snippet */
+	return this.evalLua(luaScript)
+}
 
 func (this *redisStore) Save(raftState db.RaftEntry, data []byte) ([]byte, error) {
 	defer this.statsCli.Timing("redis_save.latency.ms", time.Now())
-	luaSnippet := string(data)
-	luaScript := fmt.Sprintf(LUAScript,
+
+	req := new(api.SaveRequest)
+	err := req.Decode(data)
+	if err != nil {
+		return nil, err
+	}
+
+	userDB, err := this.readUserDB(req.Args)
+	if err != nil {
+		return nil, err
+	}
+
+	luaSnippet := string(req.Data)
+	luaScript := fmt.Sprintf(SaveLUAScript,
 		this.metaDB,										/* switch to metadata DB */
 		RaftStateKey, RaftStateTermKey, raftState.Term,		/* insert RAFT state term */
 		RaftStateKey, RaftStateIndexKey, raftState.Index,	/* insert RAFT state index */
+		userDB,												/* switch to user DB */
 		luaSnippet)											/* user supplied Lua snippet */
 	return this.evalLua(luaScript)
+}
+
+func (this *redisStore) readUserDB(args map[string][]byte) (int, error) {
+	userDB := 0
+	if dbIdx, present := args[DBIndexKey]; present {
+		return strconv.Atoi(string(dbIdx))
+	}
+	return userDB, nil
 }
 
 func (this *redisStore) evalLua(luaScript string) ([]byte, error) {

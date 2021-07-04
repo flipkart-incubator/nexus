@@ -75,15 +75,19 @@ func (this *mockRepl) Stop() {
 }
 
 func (this *mockRepl) Load(ctx context.Context, data []byte) ([]byte, error) {
-	id := binary.BigEndian.Uint32(data)
+	req := new(api.LoadRequest)
+	_ = req.Decode(data)
+	id := binary.BigEndian.Uint32(req.Data)
 	return this.data[id], nil
 }
 
 func (this *mockRepl) Save(ctx context.Context, data []byte) ([]byte, error) {
-	if hsh, err := hashCode(data); err != nil {
+	req := new(api.SaveRequest)
+	_ = req.Decode(data)
+	if hsh, err := hashCode(req.Data); err != nil {
 		return nil, err
 	} else {
-		this.data[hsh] = data
+		this.data[hsh] = req.Data
 		return nil, nil
 	}
 }

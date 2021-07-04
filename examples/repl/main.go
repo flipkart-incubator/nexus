@@ -31,7 +31,7 @@ func newNexusClient(nexus_url string) *grpc.NexusClient {
 }
 
 func loadMySQLCmd(nc *grpc.NexusClient, cmd string) ([]byte, error) {
-	load_req := &mstore.LoadRequest{StmtTmpl: cmd}
+	load_req := &mstore.MySQLReadRequest{StmtTmpl: cmd}
 	if bts, err := load_req.ToBytes(); err != nil {
 		return nil, err
 	} else {
@@ -40,7 +40,7 @@ func loadMySQLCmd(nc *grpc.NexusClient, cmd string) ([]byte, error) {
 }
 
 func saveMySQLCmd(nc *grpc.NexusClient, cmd string) ([]byte, error) {
-	save_req := &mstore.SaveRequest{StmtTmpl: cmd}
+	save_req := &mstore.MySQLSaveRequest{StmtTmpl: cmd}
 	if bts, err := save_req.ToBytes(); err != nil {
 		return nil, err
 	} else {

@@ -7,6 +7,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"github.com/flipkart-incubator/nexus/pkg/api"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"log"
 	"text/template"
@@ -15,12 +16,12 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-type LoadRequest struct {
+type MySQLReadRequest struct {
 	StmtTmpl string
 	Params   map[string]interface{}
 }
 
-func (this *LoadRequest) FromBytes(data []byte) error {
+func (this *MySQLReadRequest) FromBytes(data []byte) error {
 	buf := bytes.NewBuffer(data)
 	if err := gob.NewDecoder(buf).Decode(this); err != nil {
 		return err
@@ -28,16 +29,16 @@ func (this *LoadRequest) FromBytes(data []byte) error {
 	return nil
 }
 
-func (this *LoadRequest) ToBytes() ([]byte, error) {
+func (this *MySQLReadRequest) ToBytes() ([]byte, error) {
 	return encode(this)
 }
 
-type SaveRequest struct {
+type MySQLSaveRequest struct {
 	StmtTmpl string
 	Params   map[string]interface{}
 }
 
-func (this *SaveRequest) FromBytes(data []byte) error {
+func (this *MySQLSaveRequest) FromBytes(data []byte) error {
 	buf := bytes.NewBuffer(data)
 	if err := gob.NewDecoder(buf).Decode(this); err != nil {
 		return err
@@ -45,7 +46,7 @@ func (this *SaveRequest) FromBytes(data []byte) error {
 	return nil
 }
 
-func (this *SaveRequest) ToBytes() ([]byte, error) {
+func (this *MySQLSaveRequest) ToBytes() ([]byte, error) {
 	return encode(this)
 }
 
@@ -85,7 +86,7 @@ func (this *mysqlStore) GetLastAppliedEntry() (db.RaftEntry, error) {
 const txTimeout = 20 * time.Second // TODO: Should be configurable
 
 func (this *mysqlStore) load(ctx context.Context, sqlStmt string) (*sql.Rows, error) {
-	// TODO: Isolation level can be part of the LoadRequest itself ?
+	// TODO: Isolation level can be part of the MySQLReadRequest itself ?
 	if tx, err := this.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable, ReadOnly: true}); err != nil {
 		return nil, err
 	} else {
@@ -98,7 +99,7 @@ func (this *mysqlStore) save(sqlStmt string) (sql.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), txTimeout)
 	defer cancel()
 
-	// TODO: Isolation level can be part of the SaveRequest itself ?
+	// TODO: Isolation level can be part of the MySQLSaveRequest itself ?
 	if tx, err := this.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable}); err != nil {
 		return nil, err
 	} else {
@@ -114,16 +115,18 @@ func (this *mysqlStore) save(sqlStmt string) (sql.Result, error) {
 }
 
 func (this *mysqlStore) Load(data []byte) ([]byte, error) {
-	var load_req LoadRequest
-	if err := load_req.FromBytes(data); err != nil {
+	loadReq := new(api.LoadRequest)
+	_ = loadReq.Decode(data)
+	var readReq MySQLReadRequest
+	if err := readReq.FromBytes(loadReq.Data); err != nil {
 		return nil, err
 	} else {
-		sql := load_req.StmtTmpl
+		sql := readReq.StmtTmpl
 		if tmpl, err := template.New("sql_tmpl").Parse(sql); err != nil {
 			return nil, err
 		} else {
 			var buf bytes.Buffer
-			if err := tmpl.Execute(&buf, load_req.Params); err != nil {
+			if err := tmpl.Execute(&buf, readReq.Params); err != nil {
 				return nil, err
 			} else {
 				ctx, cancel := context.WithTimeout(context.Background(), txTimeout)
@@ -158,16 +161,18 @@ func (this *mysqlStore) Load(data []byte) ([]byte, error) {
 }
 
 func (this *mysqlStore) Save(_ db.RaftEntry, data []byte) ([]byte, error) {
-	var saveReq SaveRequest
-	if err := saveReq.FromBytes(data); err != nil {
+	saveReq := new(api.SaveRequest)
+	_ = saveReq.Decode(data)
+	var writeReq MySQLSaveRequest
+	if err := writeReq.FromBytes(saveReq.Data); err != nil {
 		return nil, err
 	} else {
-		sqlTmpl := saveReq.StmtTmpl
+		sqlTmpl := writeReq.StmtTmpl
 		if tmpl, err := template.New("sql_tmpl").Parse(sqlTmpl); err != nil {
 			return nil, err
 		} else {
 			var buf bytes.Buffer
-			if err := tmpl.Execute(&buf, saveReq.Params); err != nil {
+			if err := tmpl.Execute(&buf, writeReq.Params); err != nil {
 				return nil, err
 			} else {
 				if res, err := this.save(buf.String()); err != nil {
