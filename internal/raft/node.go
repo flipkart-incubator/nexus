@@ -120,9 +120,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *
 		// rest of structure populated after WAL replay
 	}
 
-	lastAppliedEntry, err := store.GetLastAppliedEntry()
-	if err == nil {
-		// TODO: Do we not consider the term ?
+	if lastAppliedEntry, err := store.GetLastAppliedEntry(); err == nil {
 		rc.appliedIndex = lastAppliedEntry.Index
 	}
 
