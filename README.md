@@ -69,15 +69,15 @@ $ <PROJECT_ROOT>/bin/redis_repl \
 
 In a separate terminal session, launch the `repl` utility:
 ```bash
-$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis save "return redis.call('set', 'hello', 'world')"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis save db.index=2 "return redis.call('set', 'hello', 'world')"
 Response from Redis (without quotes): 'OK'
-$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis save "return redis.call('incr', 'ctr')"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis save db.index=2 "return redis.call('incr', 'ctr')"
 Response from Redis (without quotes): '1'
-$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis save "return redis.call('incr', 'ctr')"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis save db.index=2 "return redis.call('incr', 'ctr')"
 Response from Redis (without quotes): '2'
-$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis load "return redis.call('keys', '*')"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis load db.index=2 "return redis.call('keys', '*')"
 Response from Redis (without quotes): '[ctr hello]'
-$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis load "return redis.call('get', 'ctr')"
+$ <PROJECT_ROOT>/bin/repl 127.0.0.1:9121 redis load db.index=2 "return redis.call('get', 'ctr')"
 Response from Redis (without quotes): '2'
 ```
 
