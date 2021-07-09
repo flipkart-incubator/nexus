@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/shamaton/msgpack"
+	"github.com/vmihailenco/msgpack/v5"
 	"log"
 	"net"
 	"sync/atomic"
