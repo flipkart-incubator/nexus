@@ -1,11 +1,10 @@
 package raft
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/gob"
 	"fmt"
+	"github.com/shamaton/msgpack"
 	"log"
 	"net"
 	"sync/atomic"
@@ -21,26 +20,21 @@ import (
 )
 
 type internalNexusRequest struct {
-	ID  uint64
-	Req []byte
+	ID  uint64 `msgpack:"i"`
+	Req []byte `msgpack:"r"`
 }
 
 type internalNexusResponse struct {
-	Res []byte
-	Err error
+	Res []byte `msgpack:"r"`
+	Err error  `msgpack:"e"`
 }
 
 func (this *internalNexusRequest) marshal() ([]byte, error) {
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(this); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return msgpack.Marshal(this)
 }
 
 func (this *internalNexusRequest) unmarshal(data []byte) error {
-	buf := bytes.NewBuffer(data)
-	return gob.NewDecoder(buf).Decode(this)
+	return msgpack.Unmarshal(data, this)
 }
 
 type replicator struct {
