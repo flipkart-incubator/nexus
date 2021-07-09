@@ -15,8 +15,10 @@ type internalNexusRequest struct {
 	Req []byte `msgpack:"r"`
 }
 
+const byte_size = 1024
+
 func BenchmarkMsgPackShamaton(b *testing.B) {
-	token := make([]byte, 4096)
+	token := make([]byte, byte_size)
 	rand.Read(token)
 
 	r := internalNexusRequest{
@@ -30,7 +32,7 @@ func BenchmarkMsgPackShamaton(b *testing.B) {
 }
 
 func BenchmarkMsgPackVmihailenco(b *testing.B) {
-	token := make([]byte, 4096)
+	token := make([]byte, byte_size)
 	rand.Read(token)
 
 	r := internalNexusRequest{
@@ -45,7 +47,7 @@ func BenchmarkMsgPackVmihailenco(b *testing.B) {
 
 
 func BenchmarkProtobuf(b *testing.B) {
-	token := make([]byte, 4096)
+	token := make([]byte, byte_size)
 	rand.Read(token)
 
 	r := NexusInternalRequest{
@@ -59,7 +61,7 @@ func BenchmarkProtobuf(b *testing.B) {
 
 
 func BenchmarkGOB(b *testing.B) {
-	token := make([]byte, 4096)
+	token := make([]byte, byte_size)
 	rand.Read(token)
 
 	r := NexusInternalRequest{
@@ -73,7 +75,7 @@ func BenchmarkGOB(b *testing.B) {
 }
 
 func BenchmarkDecodeMsgPackShamaton(b *testing.B) {
-	token := make([]byte, 4096)
+	token := make([]byte, byte_size)
 	rand.Read(token)
 
 	r := internalNexusRequest{
@@ -88,7 +90,7 @@ func BenchmarkDecodeMsgPackShamaton(b *testing.B) {
 }
 
 func BenchmarkDecodeMsgPackVmihailenco(b *testing.B) {
-	token := make([]byte, 4096)
+	token := make([]byte, byte_size)
 	rand.Read(token)
 
 	r := internalNexusRequest{
@@ -104,7 +106,7 @@ func BenchmarkDecodeMsgPackVmihailenco(b *testing.B) {
 
 
 func BenchmarkDecodeProtobuf(b *testing.B) {
-	token := make([]byte, 4096)
+	token := make([]byte, byte_size)
 	rand.Read(token)
 
 	r := NexusInternalRequest{
@@ -122,7 +124,7 @@ func BenchmarkDecodeProtobuf(b *testing.B) {
 
 
 func BenchmarkDecodeGOB(b *testing.B) {
-	token := make([]byte, 4096)
+	token := make([]byte, byte_size)
 	rand.Read(token)
 
 	r := NexusInternalRequest{
