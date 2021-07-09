@@ -1,11 +1,11 @@
 package raft
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/gob"
 	"fmt"
+	"github.com/flipkart-incubator/nexus/internal/models"
+	"github.com/golang/protobuf/proto"
 	"log"
 	"net"
 	"sync/atomic"
@@ -20,27 +20,9 @@ import (
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
 )
 
-type internalNexusRequest struct {
-	ID  uint64
-	Req []byte
-}
-
 type internalNexusResponse struct {
 	Res []byte
 	Err error
-}
-
-func (this *internalNexusRequest) marshal() ([]byte, error) {
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(this); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-func (this *internalNexusRequest) unmarshal(data []byte) error {
-	buf := bytes.NewBuffer(data)
-	return gob.NewDecoder(buf).Decode(this)
 }
 
 type replicator struct {
@@ -103,8 +85,8 @@ func (this *replicator) ListMembers() (uint64, map[uint64]string) {
 func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 	// TODO: Validate raft state to check if Start() has been invoked
 	defer this.statsCli.Timing("save.latency.ms", time.Now())
-	repl_req := &internalNexusRequest{ID: this.idGen.Next(), Req: data}
-	if repl_req_data, err := repl_req.marshal(); err != nil {
+	repl_req := &models.NexusInternalRequest{ID: this.idGen.Next(), Req: data}
+	if repl_req_data, err := proto.Marshal(repl_req); err != nil {
 		this.statsCli.Incr("save.marshal.error", 1)
 		return nil, err
 	} else {
@@ -245,8 +227,8 @@ func (this *replicator) readCommits() {
 			if len(entry.Data) > 0 {
 				switch entry.Type {
 				case raftpb.EntryNormal:
-					var repl_req internalNexusRequest
-					if err := repl_req.unmarshal(entry.Data); err != nil {
+					var repl_req models.NexusInternalRequest
+					if err := proto.Unmarshal(entry.Data, &repl_req); err != nil {
 						log.Fatal(err)
 					} else {
 						repl_res := internalNexusResponse{}

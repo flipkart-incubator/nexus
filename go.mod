@@ -10,7 +10,7 @@ require (
 	github.com/go-redis/redis v6.15.6+incompatible
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gogo/protobuf v1.3.1 // indirect
-	github.com/golang/protobuf v1.3.2
+	github.com/golang/protobuf v1.5.0
 	github.com/onsi/ginkgo v1.12.0 // indirect
 	github.com/onsi/gomega v1.9.0 // indirect
 	github.com/prometheus/client_golang v1.2.1 // indirect
@@ -20,6 +20,7 @@ require (
 	golang.org/x/sys v0.0.0-20200124204421-9fbb57f87de9 // indirect
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 	google.golang.org/grpc v1.25.1
+	google.golang.org/protobuf v1.27.1
 	gopkg.in/yaml.v2 v2.2.7 // indirect
 )
 
