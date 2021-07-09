@@ -14,7 +14,9 @@ require (
 	github.com/onsi/ginkgo v1.12.0 // indirect
 	github.com/onsi/gomega v1.9.0 // indirect
 	github.com/prometheus/client_golang v1.2.1 // indirect
+	github.com/shamaton/msgpack v1.2.1 // indirect
 	github.com/smira/go-statsd v1.3.1
+	github.com/vmihailenco/msgpack/v5 v5.3.4 // indirect
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	go.uber.org/zap v1.13.0 // indirect
 	golang.org/x/sys v0.0.0-20200124204421-9fbb57f87de9 // indirect
