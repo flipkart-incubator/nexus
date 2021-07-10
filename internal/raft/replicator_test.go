@@ -459,8 +459,8 @@ func (this *kvReq) toBytes() ([]byte, error) {
 }
 
 type inMemKVStore struct {
-	mu      sync.Mutex
-	content map[string]interface{}
+	mu        sync.Mutex
+	content   map[string]interface{}
 	currEntry db.RaftEntry
 }
 
@@ -509,7 +509,7 @@ func (this *inMemKVStore) Save(raftEntry db.RaftEntry, data []byte) ([]byte, err
 }
 
 const (
-	raftTermKey = "raft.term"
+	raftTermKey  = "raft.term"
 	raftIndexKey = "raft.index"
 )
 
@@ -521,7 +521,7 @@ func (this *inMemKVStore) Backup(_ db.SnapshotState) ([]byte, error) {
 	defer func() {
 		delete(this.content, raftTermKey)
 		delete(this.content, raftIndexKey)
-	} ()
+	}()
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(this.content); err != nil {
 		return nil, err
