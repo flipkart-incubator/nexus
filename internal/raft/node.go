@@ -124,7 +124,10 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *
 		rc.appliedIndex = lastAppliedEntry.Index
 	}
 
-	rc.genClusterID()
+	if rc.cid = opts.ClusterId(); rc.cid == 0 {
+		rc.genClusterID()
+	}
+
 	if rc.join {
 		rc.rpeers[nodeId] = opts.NodeUrl().String()
 	}

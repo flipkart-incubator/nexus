@@ -24,8 +24,8 @@ const (
 	defaultSnapshotCatchUpEntries int64 = 5000
 
 	defaultRaftReplTimeout = 5
-	defaultMaxWAL = 5
-	defaultMaxSNAP = 5
+	defaultMaxWAL          = 5
+	defaultMaxSNAP         = 5
 )
 
 type Option func(*options) error
@@ -37,6 +37,7 @@ type Options interface {
 	LogDir() string
 	SnapDir() string
 	ClusterUrls() map[uint64]string
+	ClusterId() uint64
 	ReplTimeout() time.Duration
 	ReadOption() raft.ReadOnlyOption
 	StatsDAddr() string
@@ -52,6 +53,7 @@ type options struct {
 	logDir                 string
 	snapDir                string
 	clusterUrl             string
+	clusterName            string
 	clusterUrls            []*url.URL
 	replTimeout            time.Duration
 	leaseBasedReads        bool
@@ -72,6 +74,7 @@ func init() {
 	flag.StringVar(&opts.logDir, "nexus-log-dir", "/tmp/logs", "Dir for storing RAFT logs")
 	flag.StringVar(&opts.snapDir, "nexus-snap-dir", "/tmp/snap", "Dir for storing RAFT snapshots")
 	flag.StringVar(&opts.clusterUrl, "nexus-cluster-url", "", "Comma separated list of Nexus URLs of other nodes in the cluster")
+	flag.StringVar(&opts.clusterName, "nexus-cluster-name", "", "Unique name of this Nexus cluster")
 	flag.Int64Var(&replTimeoutInSecs, "nexus-repl-timeout", defaultRaftReplTimeout, "Replication timeout in seconds")
 	flag.BoolVar(&opts.leaseBasedReads, "nexus-lease-based-reads", true, "Perform reads using RAFT leader leases")
 	flag.StringVar(&opts.statsdAddr, "nexus-statsd-addr", "", "StatsD server address (host:port) for relaying various metrics")
@@ -95,6 +98,7 @@ func OptionsFromFlags() []Option {
 		MaxWALFiles(opts.maxWALFiles),
 		SnapshotCount(opts.snapshotCount),
 		SnapshotCatchUpEntries(opts.snapshotCatchUpEntries),
+		ClusterName(opts.clusterName),
 	}
 }
 
@@ -109,10 +113,10 @@ func NewOptions(opts ...Option) (Options, error) {
 }
 
 func (this *options) NodeId() uint64 {
-	return this.nodeId(this.nodeUrl.Host)
+	return this.hash(this.nodeUrl.Host)
 }
 
-func (this *options) nodeId(url string) uint64 {
+func (this *options) hash(url string) uint64 {
 	hash := sha1.Sum([]byte(url))
 	return binary.BigEndian.Uint64(hash[:8])
 }
@@ -137,7 +141,7 @@ func (this *options) SnapDir() string {
 func (this *options) ClusterUrls() map[uint64]string {
 	res := make(map[uint64]string, len(this.clusterUrls))
 	for _, nodeUrl := range this.clusterUrls {
-		id := this.nodeId(nodeUrl.Host)
+		id := this.hash(nodeUrl.Host)
 		res[id] = nodeUrl.String()
 	}
 	return res
@@ -341,6 +345,20 @@ func SnapshotCatchUpEntries(count int64) Option {
 			return errors.New("snapshotCatchUpEntries cannot be < 1")
 		}
 		opts.snapshotCatchUpEntries = count
+		return nil
+	}
+}
+
+func (this *options) ClusterId() uint64 {
+	if this.clusterName == "" {
+		return 0
+	}
+	return this.hash(this.clusterName)
+}
+
+func ClusterName(name string) Option {
+	return func(opts *options) error {
+		opts.clusterName = name
 		return nil
 	}
 }
