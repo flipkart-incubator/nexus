@@ -1,7 +1,7 @@
 package api
 
 import (
-	context "context"
+	"context"
 	"errors"
 	internal_raft "github.com/flipkart-incubator/nexus/internal/raft"
 	"github.com/flipkart-incubator/nexus/pkg/db"
