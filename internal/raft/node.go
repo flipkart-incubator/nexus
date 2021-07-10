@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/flipkart-incubator/nexus/internal/raft/snap"
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
 
@@ -38,7 +39,6 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/coreos/etcd/rafthttp"
-	"github.com/coreos/etcd/snap"
 	"github.com/coreos/etcd/wal"
 	"github.com/coreos/etcd/wal/walpb"
 )
