@@ -7,9 +7,15 @@ type SnapshotState struct {
 	AppliedIndex  uint64
 }
 
+type RaftEntry struct {
+	Term  uint64
+	Index uint64
+}
+
 type Store interface {
 	io.Closer
-	Save([]byte) ([]byte, error)
+	GetLastAppliedEntry() (RaftEntry, error)
+	Save(RaftEntry, []byte) ([]byte, error)
 	Load([]byte) ([]byte, error)
 
 	Backup(SnapshotState) ([]byte, error)

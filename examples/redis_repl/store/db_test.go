@@ -2,8 +2,10 @@ package store
 
 import (
 	"fmt"
+	"github.com/flipkart-incubator/nexus/pkg/api"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -18,6 +20,7 @@ const (
 	keyPref   = "NEXUS_TEST"
 	value     = "hello_world"
 	redisDB   = 2
+	metadataDB = 13
 )
 
 func TestMain(m *testing.M) {
@@ -26,7 +29,7 @@ func TestMain(m *testing.M) {
 }
 
 func initRedisStore() {
-	if rs, err := NewRedisDB(redisHost, redisPort, stats.NewNoOpClient()); err != nil {
+	if rs, err := NewRedisDB(redisHost, redisPort, metadataDB, stats.NewNoOpClient()); err != nil {
 		panic(err)
 	} else {
 		store = rs
@@ -34,8 +37,13 @@ func initRedisStore() {
 }
 
 func insertKey(t *testing.T, key, val string, dbIdx int) {
-	saveReq := fmt.Sprintf("redis.call('select', '%d') return redis.call('set', '%s', '%s')", dbIdx, key, val)
-	if saveRes, err := store.Save([]byte(saveReq)); err != nil {
+	saveReq := fmt.Sprintf("return redis.call('set', '%s', '%s')", key, val)
+	req := &api.SaveRequest{
+		Data: []byte(saveReq),
+		Args: map[string][]byte {DBIndexKey: []byte(strconv.Itoa(dbIdx))},
+	}
+	reqBts, _ := req.Encode()
+	if saveRes, err := store.Save(db.RaftEntry{Term: 2, Index: 10}, reqBts); err != nil {
 		t.Fatal(err)
 	} else {
 		t.Logf("Insert response received: %s", saveRes)
@@ -43,8 +51,13 @@ func insertKey(t *testing.T, key, val string, dbIdx int) {
 }
 
 func deleteKey(t *testing.T, key string, dbIdx int) {
-	delReq := fmt.Sprintf("redis.call('select', '%d') return redis.call('del', '%s')", dbIdx, key)
-	if delRes, err := store.Save([]byte(delReq)); err != nil {
+	delReq := fmt.Sprintf("return redis.call('del', '%s')", key)
+	req := &api.SaveRequest{
+		Data: []byte(delReq),
+		Args: map[string][]byte {DBIndexKey: []byte(strconv.Itoa(dbIdx))},
+	}
+	reqBts, _ := req.Encode()
+	if delRes, err := store.Save(db.RaftEntry{}, reqBts); err != nil {
 		t.Fatal(err)
 	} else {
 		t.Logf("Delete response received: %s", delRes)
@@ -52,8 +65,13 @@ func deleteKey(t *testing.T, key string, dbIdx int) {
 }
 
 func assertKey(t *testing.T, key, expVal string, dbIdx int) {
-	loadReq := fmt.Sprintf("redis.call('select', '%d') return redis.call('get', '%s')", dbIdx, key)
-	if loadRes, err := store.Save([]byte(loadReq)); err != nil {
+	loadReq := fmt.Sprintf("return redis.call('get', '%s')", key)
+	req := &api.LoadRequest{
+		Data: []byte(loadReq),
+		Args: map[string][]byte {DBIndexKey: []byte(strconv.Itoa(dbIdx))},
+	}
+	reqBts, _ := req.Encode()
+	if loadRes, err := store.Save(db.RaftEntry{}, reqBts); err != nil {
 		t.Fatal(err)
 	} else {
 		if string(loadRes) != expVal {

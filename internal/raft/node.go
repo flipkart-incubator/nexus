@@ -91,8 +91,7 @@ type raftNode struct {
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries. To shutdown, close proposeC and read errorC.
-func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client,
-	getSnapshot func(db.SnapshotState) ([]byte, error)) *raftNode {
+func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *raftNode {
 
 	readStateC := make(chan raft.ReadState)
 	commitC := make(chan *raftpb.Entry)
@@ -108,7 +107,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client,
 		join:                   opts.Join(),
 		waldir:                 opts.LogDir(),
 		snapdir:                opts.SnapDir(),
-		getSnapshot:            getSnapshot,
+		getSnapshot:            store.Backup,
 		snapCount:              opts.SnapshotCount(),
 		snapshotCatchUpEntries: opts.SnapshotCatchUpEntries(),
 		stopc:                  make(chan struct{}),
@@ -119,6 +118,10 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client,
 		maxSnapFiles:           opts.MaxSnapFiles(),
 		maxWALFiles:            opts.MaxWALFiles(),
 		// rest of structure populated after WAL replay
+	}
+
+	if lastAppliedEntry, err := store.GetLastAppliedEntry(); err == nil {
+		rc.appliedIndex = lastAppliedEntry.Index
 	}
 
 	rc.genClusterID()
@@ -325,6 +328,7 @@ func (rc *raftNode) startRaft() {
 		MaxInflightMsgs: 256,
 		ReadOnlyOption:  rc.readOption,
 		CheckQuorum:     rc.readOption == raft.ReadOnlyLeaseBased,
+		Applied:         rc.appliedIndex,
 	}
 
 	if oldwal {
@@ -438,7 +442,12 @@ func (rc *raftNode) serveChannels() {
 	}
 	rc.confState = snap.Metadata.ConfState
 	rc.snapshotIndex = snap.Metadata.Index
-	rc.appliedIndex = snap.Metadata.Index
+	// Set appliedIndex only if its not already initialised
+	// Note that we also set appliedIndex during init from
+	// storage supplied value.
+	if rc.appliedIndex == 0 {
+		rc.appliedIndex = snap.Metadata.Index
+	}
 
 	defer rc.wal.Close()
 

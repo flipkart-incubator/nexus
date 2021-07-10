@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"github.com/flipkart-incubator/nexus/pkg/api"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"strconv"
 	"strings"
@@ -17,10 +18,11 @@ import (
 type redisStore struct {
 	cli      *redis.Client
 	statsCli stats.Client
+	metaDB   uint
 }
 
 func (this *redisStore) Close() error {
-	this.statsCli.Close()
+	_ = this.statsCli.Close()
 	return this.cli.Close()
 }
 
@@ -28,16 +30,89 @@ func isRedisError(err error) bool {
 	return err != nil && !strings.HasSuffix(strings.TrimSpace(err.Error()), "nil")
 }
 
+const (
+	RaftStateKey      = "raft.state"
+	RaftStateTermKey  = "term"
+	RaftStateIndexKey = "index"
+	DBIndexKey        = "db.index"
+)
+
+func (this *redisStore) GetLastAppliedEntry() (db.RaftEntry, error) {
+	metaCli := selectDB(int(this.metaDB), this.cli)
+	if result, err := metaCli.HGetAll(RaftStateKey).Result(); err != nil {
+		return db.RaftEntry{}, err
+	} else {
+		term, _ := strconv.ParseUint(result[RaftStateTermKey], 10, 64)
+		index, _ := strconv.ParseUint(result[RaftStateIndexKey], 10, 64)
+		return db.RaftEntry{Term: term, Index: index}, nil
+	}
+}
+
+const (
+	LoadLUAScript = `
+redis.call('select', '%d')
+%s
+`
+	SaveLUAScript = `
+redis.call('select', '%d')
+redis.call('hset', '%s', '%s', '%d')
+redis.call('hset', '%s', '%s', '%d')
+redis.call('select', '%d')
+%s
+`
+)
+
 func (this *redisStore) Load(data []byte) ([]byte, error) {
 	defer this.statsCli.Timing("redis_load.latency.ms", time.Now())
-	luaScript := string(data)
+
+	req := new(api.LoadRequest)
+	err := req.Decode(data)
+	if err != nil {
+		return nil, err
+	}
+
+	userDB, err := this.readUserDB(req.Args)
+	if err != nil {
+		return nil, err
+	}
+
+	luaSnippet := string(req.Data)
+	luaScript := fmt.Sprintf(LoadLUAScript,
+		userDB,			/* switch to user DB */
+		luaSnippet)		/* user supplied Lua snippet */
 	return this.evalLua(luaScript)
 }
 
-func (this *redisStore) Save(data []byte) ([]byte, error) {
+func (this *redisStore) Save(raftState db.RaftEntry, data []byte) ([]byte, error) {
 	defer this.statsCli.Timing("redis_save.latency.ms", time.Now())
-	luaScript := string(data)
+
+	req := new(api.SaveRequest)
+	err := req.Decode(data)
+	if err != nil {
+		return nil, err
+	}
+
+	userDB, err := this.readUserDB(req.Args)
+	if err != nil {
+		return nil, err
+	}
+
+	luaSnippet := string(req.Data)
+	luaScript := fmt.Sprintf(SaveLUAScript,
+		this.metaDB,										/* switch to metadata DB */
+		RaftStateKey, RaftStateTermKey, raftState.Term,		/* insert RAFT state term */
+		RaftStateKey, RaftStateIndexKey, raftState.Index,	/* insert RAFT state index */
+		userDB,												/* switch to user DB */
+		luaSnippet)											/* user supplied Lua snippet */
 	return this.evalLua(luaScript)
+}
+
+func (this *redisStore) readUserDB(args map[string][]byte) (int, error) {
+	userDB := 0
+	if dbIdx, present := args[DBIndexKey]; present {
+		return strconv.Atoi(string(dbIdx))
+	}
+	return userDB, nil
 }
 
 func (this *redisStore) evalLua(luaScript string) ([]byte, error) {
@@ -57,10 +132,10 @@ func (this *redisStore) evalLua(luaScript string) ([]byte, error) {
 func (this *redisStore) extractAllData() ([]map[string][]byte, error) {
 	maxDBs := this.getMaxDBIdx()
 	result := make([]map[string][]byte, maxDBs)
-	for db := 0; db < maxDBs; db++ {
-		cli := selectDB(db, this.cli)
+	for dbIndex := 0; dbIndex < maxDBs; dbIndex++ {
+		cli := selectDB(dbIndex, this.cli)
 		cursor := uint64(0)
-		result[db] = make(map[string][]byte)
+		result[dbIndex] = make(map[string][]byte)
 
 		for {
 			keys, new_cursor, err := cli.Scan(cursor, "", 1000).Result()
@@ -71,7 +146,7 @@ func (this *redisStore) extractAllData() ([]map[string][]byte, error) {
 				if key_data, err := cli.Dump(key).Result(); isRedisError(err) {
 					return nil, err
 				} else {
-					result[db][key] = []byte(key_data)
+					result[dbIndex][key] = []byte(key_data)
 				}
 			}
 			if new_cursor == 0 {
@@ -176,10 +251,10 @@ func connect(redis_host string, redis_port uint) (*redis.Client, error) {
 	return client, err
 }
 
-func NewRedisDB(host string, port uint, statsCli stats.Client) (*redisStore, error) {
+func NewRedisDB(host string, port, metadataDB uint, statsCli stats.Client) (*redisStore, error) {
 	if cli, err := connect(host, port); err != nil {
 		return nil, err
 	} else {
-		return &redisStore{cli, statsCli}, nil
+		return &redisStore{cli, statsCli, metadataDB}, nil
 	}
 }

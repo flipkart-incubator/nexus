@@ -50,18 +50,26 @@ func (this *NexusService) Check(ctx context.Context, req *api.HealthCheckRequest
 }
 
 func (this *NexusService) Save(ctx context.Context, req *api.SaveRequest) (*api.SaveResponse, error) {
-	if res, err := this.repl.Save(ctx, req.Data); err != nil {
-		return &api.SaveResponse{Status: &api.Status{Code: -1, Message: err.Error()}, ReqData: req.Data}, err
+	if replReq, err := req.Encode(); err != nil {
+		return nil, err
 	} else {
-		return &api.SaveResponse{Status: &api.Status{}, ReqData: req.Data, ResData: res}, nil
+		if res, err := this.repl.Save(ctx, replReq); err != nil {
+			return &api.SaveResponse{Status: &api.Status{Code: -1, Message: err.Error()}, ReqData: req.Data}, err
+		} else {
+			return &api.SaveResponse{Status: &api.Status{}, ReqData: req.Data, ResData: res}, nil
+		}
 	}
 }
 
 func (this *NexusService) Load(ctx context.Context, req *api.LoadRequest) (*api.LoadResponse, error) {
-	if res, err := this.repl.Load(ctx, req.Data); err != nil {
-		return &api.LoadResponse{Status: &api.Status{Code: -1, Message: err.Error()}, ReqData: req.Data}, err
+	if replReq, err := req.Encode(); err != nil {
+		return nil, err
 	} else {
-		return &api.LoadResponse{Status: &api.Status{}, ReqData: req.Data, ResData: res}, nil
+		if res, err := this.repl.Load(ctx, replReq); err != nil {
+			return &api.LoadResponse{Status: &api.Status{Code: -1, Message: err.Error()}, ReqData: req.Data}, err
+		} else {
+			return &api.LoadResponse{Status: &api.Status{}, ReqData: req.Data, ResData: res}, nil
+		}
 	}
 }
 
