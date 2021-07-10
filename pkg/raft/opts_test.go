@@ -76,7 +76,7 @@ func TestClusterId(t *testing.T){
 		t.Errorf("Expected no error but got: %v", err)
 	} else {
 		if opts.ClusterId() == 0 {
-			t.Errorf("Expected clusterID to be non 0 when clusterName is not provided. Got %d ", opts.ClusterId())
+			t.Errorf("Expected clusterID to be non 0 when clusterName is provided. Got %d ", opts.ClusterId())
 		}
 	}
 }
