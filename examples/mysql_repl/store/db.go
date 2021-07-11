@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/flipkart-incubator/nexus/pkg/api"
 	"github.com/flipkart-incubator/nexus/pkg/db"
+	"io"
 	"log"
 	"text/template"
 	"time"
@@ -188,7 +189,7 @@ func (this *mysqlStore) Save(_ db.RaftEntry, data []byte) ([]byte, error) {
 	}
 }
 
-func (this *mysqlStore) Backup(_ db.SnapshotState) ([]byte, error) {
+func (this *mysqlStore) Backup(_ db.SnapshotState) (io.Reader, error) {
 	return nil, nil
 }
 

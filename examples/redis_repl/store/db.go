@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/flipkart-incubator/nexus/pkg/api"
 	"github.com/flipkart-incubator/nexus/pkg/db"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -181,7 +182,7 @@ func (this *redisStore) loadAllData(redis_data_set []map[string][]byte, replacea
 	return nil
 }
 
-func (this *redisStore) Backup(_ db.SnapshotState) ([]byte, error) {
+func (this *redisStore) Backup(_ db.SnapshotState) (io.Reader, error) {
 	defer this.statsCli.Timing("redis_backup.latency.ms", time.Now())
 	if data, err := this.extractAllData(); isRedisError(err) {
 		this.statsCli.Incr("backup.extract.error", 1)
@@ -192,7 +193,7 @@ func (this *redisStore) Backup(_ db.SnapshotState) ([]byte, error) {
 			this.statsCli.Incr("backup.encode.error", 1)
 			return nil, err
 		}
-		return buf.Bytes(), nil
+		return &buf, nil
 	}
 }
 

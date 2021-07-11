@@ -16,7 +16,6 @@ package snap
 
 import (
 	"fmt"
-	"hash/crc32"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -56,29 +55,6 @@ func TestSaveAndLoad(t *testing.T) {
 	}
 	if !reflect.DeepEqual(g, testSnap) {
 		t.Errorf("snap = %#v, want %#v", g, testSnap)
-	}
-}
-
-func TestBadCRC(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), "snapshot")
-	err := os.Mkdir(dir, 0700)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-	ss := New(dir)
-	err = ss.save(testSnap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { crcTable = crc32.MakeTable(crc32.Castagnoli) }()
-	// switch to use another crc table
-	// fake a crc mismatch
-	crcTable = crc32.MakeTable(crc32.Koopman)
-
-	_, err = Read(filepath.Join(dir, fmt.Sprintf("%016x-%016x.snap", 1, 1)))
-	if err == nil || err != ErrCRCMismatch {
-		t.Errorf("err = %v, want %v", err, ErrCRCMismatch)
 	}
 }
 
@@ -201,7 +177,7 @@ func TestEmptySnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = Read(filepath.Join(dir, "1.snap"))
+	_, err = readSnap(filepath.Join(dir, "1.snap"))
 	if err != ErrEmptySnapshot {
 		t.Errorf("err = %v, want %v", err, ErrEmptySnapshot)
 	}

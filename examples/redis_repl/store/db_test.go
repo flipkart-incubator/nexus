@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/flipkart-incubator/nexus/pkg/api"
 	"github.com/flipkart-incubator/nexus/pkg/db"
@@ -124,7 +125,9 @@ func TestBackupRestore(t *testing.T) {
 	}
 
 	// restore the DB
-	err = store.Restore(bkp)
+	buff := bytes.Buffer{}
+	_, _ = buff.ReadFrom(bkp)
+	err = store.Restore(buff.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
