@@ -4,10 +4,10 @@ package api
 
 import (
 	context "context"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -24,7 +24,7 @@ type NexusClient interface {
 	Load(ctx context.Context, in *LoadRequest, opts ...grpc.CallOption) (*LoadResponse, error)
 	AddNode(ctx context.Context, in *AddNodeRequest, opts ...grpc.CallOption) (*Status, error)
 	RemoveNode(ctx context.Context, in *RemoveNodeRequest, opts ...grpc.CallOption) (*Status, error)
-	ListNodes(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListNodesResponse, error)
+	ListNodes(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListNodesResponse, error)
 }
 
 type nexusClient struct {
@@ -80,7 +80,7 @@ func (c *nexusClient) RemoveNode(ctx context.Context, in *RemoveNodeRequest, opt
 	return out, nil
 }
 
-func (c *nexusClient) ListNodes(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListNodesResponse, error) {
+func (c *nexusClient) ListNodes(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListNodesResponse, error) {
 	out := new(ListNodesResponse)
 	err := c.cc.Invoke(ctx, "/nexus.api.Nexus/ListNodes", in, out, opts...)
 	if err != nil {
@@ -98,7 +98,7 @@ type NexusServer interface {
 	Load(context.Context, *LoadRequest) (*LoadResponse, error)
 	AddNode(context.Context, *AddNodeRequest) (*Status, error)
 	RemoveNode(context.Context, *RemoveNodeRequest) (*Status, error)
-	ListNodes(context.Context, *empty.Empty) (*ListNodesResponse, error)
+	ListNodes(context.Context, *emptypb.Empty) (*ListNodesResponse, error)
 }
 
 // UnimplementedNexusServer should be embedded to have forward compatible implementations.
@@ -120,7 +120,7 @@ func (UnimplementedNexusServer) AddNode(context.Context, *AddNodeRequest) (*Stat
 func (UnimplementedNexusServer) RemoveNode(context.Context, *RemoveNodeRequest) (*Status, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveNode not implemented")
 }
-func (UnimplementedNexusServer) ListNodes(context.Context, *empty.Empty) (*ListNodesResponse, error) {
+func (UnimplementedNexusServer) ListNodes(context.Context, *emptypb.Empty) (*ListNodesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListNodes not implemented")
 }
 
@@ -226,7 +226,7 @@ func _Nexus_RemoveNode_Handler(srv interface{}, ctx context.Context, dec func(in
 }
 
 func _Nexus_ListNodes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func _Nexus_ListNodes_Handler(srv interface{}, ctx context.Context, dec func(int
 		FullMethod: "/nexus.api.Nexus/ListNodes",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NexusServer).ListNodes(ctx, req.(*empty.Empty))
+		return srv.(NexusServer).ListNodes(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }

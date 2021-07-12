@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/flipkart-incubator/nexus/models"
 	"hash/fnv"
 	"testing"
 
@@ -100,7 +101,7 @@ func (this *mockRepl) RemoveMember(context.Context, string) error {
 	return errors.New("mockRepl::RemoveMember not implemented")
 }
 
-func (this *mockRepl) ListMembers() (uint64, map[uint64]string) {
+func (this *mockRepl) ListMembers() (uint64, map[uint64]*models.NodeInfo) {
 	return uint64(0), nil
 }
 

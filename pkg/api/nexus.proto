@@ -3,6 +3,7 @@ package nexus.api;
 option go_package = "github.com/flipkart-incubator/nexus/pkg/api";
 
 import "google/protobuf/empty.proto";
+import "models/internal.proto";
 
 message Status {
   int32 code = 1;
@@ -39,10 +40,11 @@ message RemoveNodeRequest {
   string nodeUrl = 1;
 }
 
+
 message ListNodesResponse {
   Status status = 1;
   uint64 leader = 2;
-  map<uint64, string> nodes = 3;
+  map<uint64, models.NodeInfo> nodes = 3;
 }
 
 message HealthCheckRequest {
