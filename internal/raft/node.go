@@ -59,7 +59,7 @@ type raftNode struct {
 	join        bool   // node is joining an existing cluster
 	waldir      string // path to WAL directory
 	snapdir     string // path to snapshot directory
-	getSnapshot func(db.SnapshotState) (io.Reader, error)
+	getSnapshot func(db.SnapshotState) (io.ReadCloser, error)
 	lastIndex   uint64 // index of log at start
 
 	confState     raftpb.ConfState
@@ -228,9 +228,14 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 }
 
 func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
-	snapshot, err := rc.snapshotter.Load()
+	snapshot, data, err := rc.snapshotter.Load()
 	if err != nil && err != snap.ErrNoSnapshot {
 		log.Fatalf("nexus.raft: [Node %x] error loading snapshot (%v)", rc.id, err)
+	}
+	// this path only needs the snapshot metadata and
+	// hence closing the data reader right away
+	if data != nil {
+		_ = data.Close()
 	}
 	return snapshot
 }
@@ -413,6 +418,7 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	if err != nil {
 		log.Panic(err)
 	}
+	defer data.Close()
 	snapshot, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, nil)
 	if err != nil {
 		panic(err)

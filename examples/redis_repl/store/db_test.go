@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/flipkart-incubator/nexus/pkg/api"
 	"github.com/flipkart-incubator/nexus/pkg/db"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
@@ -127,7 +128,7 @@ func TestBackupRestore(t *testing.T) {
 	// restore the DB
 	buff := bytes.Buffer{}
 	_, _ = buff.ReadFrom(bkp)
-	err = store.Restore(buff.Bytes())
+	err = store.Restore(ioutil.NopCloser(&buff))
 	if err != nil {
 		t.Fatal(err)
 	}

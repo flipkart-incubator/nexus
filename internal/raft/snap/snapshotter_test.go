@@ -49,10 +49,12 @@ func TestSaveAndLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g, err := ss.Load()
+	g, data, err := ss.Load()
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
 	}
+	defer data.Close()
+	g.Data, _ = ioutil.ReadAll(data)
 	if !reflect.DeepEqual(g, testSnap) {
 		t.Errorf("snap = %#v, want %#v", g, testSnap)
 	}
@@ -78,10 +80,12 @@ func TestFailback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g, err := ss.Load()
+	g, data, err := ss.Load()
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
 	}
+	defer data.Close()
+	g.Data, _ = ioutil.ReadAll(data)
 	if !reflect.DeepEqual(g, testSnap) {
 		t.Errorf("snap = %#v, want %#v", g, testSnap)
 	}
@@ -141,10 +145,12 @@ func TestLoadNewestSnap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g, err := ss.Load()
+	g, data, err := ss.Load()
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
 	}
+	defer data.Close()
+	g.Data, _ = ioutil.ReadAll(data)
 	if !reflect.DeepEqual(g, &newSnap) {
 		t.Errorf("snap = %#v, want %#v", g, &newSnap)
 	}
@@ -158,7 +164,7 @@ func TestNoSnapshot(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 	ss := New(dir)
-	_, err = ss.Load()
+	_, _, err = ss.Load()
 	if err != ErrNoSnapshot {
 		t.Errorf("err = %v, want %v", err, ErrNoSnapshot)
 	}
@@ -177,7 +183,7 @@ func TestEmptySnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = readSnap(filepath.Join(dir, "1.snap"))
+	_, _, err = readSnap(filepath.Join(dir, "1.snap"))
 	if err != ErrEmptySnapshot {
 		t.Errorf("err = %v, want %v", err, ErrEmptySnapshot)
 	}
@@ -199,7 +205,7 @@ func TestAllSnapshotBroken(t *testing.T) {
 	}
 
 	ss := New(dir)
-	_, err = ss.Load()
+	_, _, err = ss.Load()
 	if err != ErrNoSnapshot {
 		t.Errorf("err = %v, want %v", err, ErrNoSnapshot)
 	}

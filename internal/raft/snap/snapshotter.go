@@ -10,7 +10,6 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -25,6 +24,7 @@ const (
 var (
 	ErrNoSnapshot    = errors.New("snap: no available snapshot")
 	ErrEmptySnapshot = errors.New("snap: empty snapshot")
+	ErrInvalidSnapshot = errors.New("snap: invalid snapshot")
 
 	// A map of valid files that can be present in the snap folder.
 	validFiles = map[string]bool{
@@ -103,58 +103,65 @@ func writeAndSyncFile(filename string, snapshot *raftpb.Snapshot, data io.Reader
 	return err
 }
 
-func (s *Snapshotter) Load() (*raftpb.Snapshot, error) {
+func (s *Snapshotter) Load() (*raftpb.Snapshot, io.ReadCloser, error) {
 	names, err := s.snapNames()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var snap *raftpb.Snapshot
+	var (
+		snap *raftpb.Snapshot
+		data io.ReadCloser
+	)
 	for _, name := range names {
-		if snap, err = loadSnap(s.dir, name); err == nil {
+		if snap, data, err = loadSnap(s.dir, name); err == nil {
 			break
 		}
 	}
 	if err != nil {
-		return nil, ErrNoSnapshot
+		return nil, nil, ErrNoSnapshot
 	}
-	return snap, nil
+	return snap, data, nil
 }
 
-func loadSnap(dir, name string) (*raftpb.Snapshot, error) {
+func loadSnap(dir, name string) (*raftpb.Snapshot, io.ReadCloser, error) {
 	fpath := filepath.Join(dir, name)
-	snap, err := readSnap(fpath)
+	snap, data, err := readSnap(fpath)
 	if err != nil {
 		renameBroken(fpath)
 	}
-	return snap, err
+	return snap, data, err
 }
 
-func readSnap(snapname string) (*raftpb.Snapshot, error) {
-	data, err := ioutil.ReadFile(snapname)
+func readSnap(snapName string) (*raftpb.Snapshot, io.ReadCloser, error) {
+	snapFile, err := os.Open(snapName)
 	if err != nil {
-		log.Printf("ERROR - cannot read file %v: %v", snapname, err)
-		return nil, err
+		log.Printf("ERROR - cannot read file %v: %v", snapName, err)
+		return nil, nil, err
 	}
 
-	if len(data) == 0 {
-		log.Printf("ERROR - unexpected empty snapshot")
-		return nil, ErrEmptySnapshot
+	snapLenBts := make([]byte, 4)
+	numRead, err := snapFile.Read(snapLenBts)
+	if numRead != len(snapLenBts) || err != nil {
+		log.Printf("ERROR - unable to read file %v: %v", snapName, err)
+		return nil, nil, ErrEmptySnapshot
 	}
 
-	if len(data) < 4 {
-		return nil, ErrEmptySnapshot
+	snapLen := binary.LittleEndian.Uint32(snapLenBts)
+	snapBts := make([]byte, snapLen)
+	numRead, err = snapFile.Read(snapBts)
+	if err != nil {
+		log.Printf("ERROR - unable to read snapshot data from file %v: %v", snapName, err)
+		return nil, nil, err
 	}
-	snapLen := binary.LittleEndian.Uint32(data[:4])
-	data = data[4:]
+	if numRead != len(snapBts) {
+		log.Printf("ERROR - unable to read snapshot data fully from file %v. Expected snapshot length: %d, actual: %d",
+			snapName, snapLen, numRead)
+		return nil, nil, ErrInvalidSnapshot
+	}
 
-	if uint32(len(data)) < snapLen {
-		return nil, ErrEmptySnapshot
-	}
-	snapBts := data[:snapLen]
 	snap := new(raftpb.Snapshot)
 	pbutil.MustUnmarshal(snap, snapBts)
-	snap.Data = data[snapLen:]
-	return snap, nil
+	return snap, snapFile, nil
 }
 
 // snapNames returns the filename of the snapshots in logical time order (from newest to oldest).
