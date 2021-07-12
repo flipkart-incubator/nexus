@@ -1,8 +1,0 @@
-syntax = "proto3";
-package snappb;
-option go_package = ".;snappb";
-
-message snapshot {
-  uint32 crc  = 1;
-  bytes data  = 2;
-}
