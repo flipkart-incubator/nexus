@@ -15,6 +15,7 @@
 package snap
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -44,7 +45,7 @@ func TestSaveAndLoad(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 	ss := New(dir)
-	err = ss.save(testSnap)
+	err = ss.SaveSnaphot(*testSnap, bytes.NewReader(testSnap.Data))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +76,7 @@ func TestFailback(t *testing.T) {
 	}
 
 	ss := New(dir)
-	err = ss.save(testSnap)
+	err = ss.SaveSnaphot(*testSnap, bytes.NewReader(testSnap.Data))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,14 +134,14 @@ func TestLoadNewestSnap(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 	ss := New(dir)
-	err = ss.save(testSnap)
+	err = ss.SaveSnaphot(*testSnap, bytes.NewReader(testSnap.Data))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	newSnap := *testSnap
 	newSnap.Metadata.Index = 5
-	err = ss.save(&newSnap)
+	err = ss.SaveSnaphot(newSnap, bytes.NewReader(newSnap.Data))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -146,14 +146,8 @@ func (rc *raftNode) saveSnap(snap raftpb.Snapshot, stream io.Reader) error {
 	if err := rc.wal.SaveSnapshot(walSnap); err != nil {
 		return err
 	}
-	if stream != nil {
-		if err := rc.snapshotter.SaveSnapStream(snap, stream); err != nil {
-			return err
-		}
-	} else {
-		if err := rc.snapshotter.SaveSnap(snap); err != nil {
-			return err
-		}
+	if err := rc.snapshotter.SaveSnaphot(snap, stream); err != nil {
+		return err
 	}
 	return rc.wal.ReleaseLockTo(snap.Metadata.Index)
 }

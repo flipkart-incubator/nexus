@@ -42,24 +42,17 @@ func New(dir string) *Snapshotter {
 	}
 }
 
-func (s *Snapshotter) SaveSnapStream(snapshot raftpb.Snapshot, stream io.Reader) error {
+func (s *Snapshotter) SaveSnaphot(snapshot raftpb.Snapshot, stream io.Reader) error {
 	if raft.IsEmptySnap(snapshot) {
 		return nil
 	}
-	return s.saveStream(&snapshot, stream)
+	return s.saveSnapshot(&snapshot, stream)
 }
 
-func (s *Snapshotter) SaveSnap(snapshot raftpb.Snapshot) error {
-	if raft.IsEmptySnap(snapshot) {
-		return nil
-	}
-	return s.save(&snapshot)
-}
-
-func (s *Snapshotter) saveStream(snapshot *raftpb.Snapshot, stream io.Reader) error {
+func (s *Snapshotter) saveSnapshot(snapshot *raftpb.Snapshot, stream io.Reader) error {
 	fname := fmt.Sprintf("%016x-%016x%s", snapshot.Metadata.Term, snapshot.Metadata.Index, snapSuffix)
 	snapFile := filepath.Join(s.dir, fname)
-	err := writeAndSyncFile(snapFile, snapshot, stream, 0666)
+	err := s.writeSnapshot(snapFile, snapshot, stream, 0666)
 	if err != nil {
 		err1 := os.Remove(snapFile)
 		if err1 != nil {
@@ -69,12 +62,8 @@ func (s *Snapshotter) saveStream(snapshot *raftpb.Snapshot, stream io.Reader) er
 	return err
 }
 
-func (s *Snapshotter) save(snapshot *raftpb.Snapshot) error {
-	return s.saveStream(snapshot, bytes.NewReader(snapshot.Data))
-}
-
-func writeAndSyncFile(filename string, snapshot *raftpb.Snapshot, data io.Reader, perm os.FileMode) error {
-	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+func (s *Snapshotter) writeSnapshot(snapFile string, snapshot *raftpb.Snapshot, data io.Reader, perm os.FileMode) error {
+	f, err := os.OpenFile(snapFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return err
 	}
@@ -91,9 +80,11 @@ func writeAndSyncFile(filename string, snapshot *raftpb.Snapshot, data io.Reader
 		return err
 	}
 
-	_, err = io.Copy(f, data)
-	if err != nil {
-		return err
+	if data != nil {
+		_, err = io.Copy(f, data)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = fileutil.Fsync(f)
