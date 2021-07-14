@@ -254,9 +254,9 @@ func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
 
 		// insert data
 		db5, db1 := peer5.db.content, peer1.db.content
-		if reflect.DeepEqual(db5, db1) {
-			//Expect db mismatch as the db snapshot will not match, as that as not been synced.
-			t.Errorf("DB Match Not Expected !!!")
+		if !reflect.DeepEqual(db5, db1) {
+			//TODO: Expect db mismatch as the db snapshot will not match, as that as not been synced.
+			t.Errorf("DB Mismatch Happened. Not Expected !!!")
 		}
 
 		// assert membership across all nodes
@@ -392,8 +392,8 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 		raft.ClusterUrl(clusterUrl),
 		raft.ReplicationTimeout(replTimeout),
 		raft.LeaseBasedReads(false),
-		raft.SnapshotCatchUpEntries(2500),
-		raft.SnapshotCount(5000),
+		raft.SnapshotCatchUpEntries(25),
+		raft.SnapshotCount(50),
 		raft.MaxWALFiles(2),
 		raft.MaxSnapFiles(2),
 	)
