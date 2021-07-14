@@ -18,6 +18,6 @@ type Store interface {
 	Save(RaftEntry, []byte) ([]byte, error)
 	Load([]byte) ([]byte, error)
 
-	Backup(SnapshotState) ([]byte, error)
-	Restore([]byte) error
+	Backup(SnapshotState) (io.ReadCloser, error)
+	Restore(io.ReadCloser) error
 }

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/flipkart-incubator/nexus/pkg/db"
+	"io"
+	"io/ioutil"
 	"os"
 	"reflect"
 	"sort"
@@ -513,7 +515,7 @@ const (
 	raftIndexKey = "raft.index"
 )
 
-func (this *inMemKVStore) Backup(_ db.SnapshotState) ([]byte, error) {
+func (this *inMemKVStore) Backup(_ db.SnapshotState) (io.ReadCloser, error) {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	this.content[raftTermKey] = strconv.Itoa(int(this.currEntry.Term))
@@ -526,15 +528,14 @@ func (this *inMemKVStore) Backup(_ db.SnapshotState) ([]byte, error) {
 	if err := gob.NewEncoder(&buf).Encode(this.content); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	return ioutil.NopCloser(&buf), nil
 }
 
-func (this *inMemKVStore) Restore(data []byte) error {
+func (this *inMemKVStore) Restore(data io.ReadCloser) error {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	content := make(map[string]interface{})
-	buf := bytes.NewBuffer(data)
-	if err := gob.NewDecoder(buf).Decode(&content); err != nil {
+	if err := gob.NewDecoder(data).Decode(&content); err != nil {
 		return err
 	} else {
 		term, _ := strconv.Atoi(content[raftTermKey].(string))
