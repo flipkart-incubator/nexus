@@ -20,6 +20,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"github.com/flipkart-incubator/nexus/pkg/db"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/flipkart-incubator/nexus/internal/raft/snap"
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
 
@@ -38,7 +40,6 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/coreos/etcd/rafthttp"
-	"github.com/coreos/etcd/snap"
 	"github.com/coreos/etcd/wal"
 	"github.com/coreos/etcd/wal/walpb"
 )
@@ -58,7 +59,7 @@ type raftNode struct {
 	join        bool   // node is joining an existing cluster
 	waldir      string // path to WAL directory
 	snapdir     string // path to snapshot directory
-	getSnapshot func(db.SnapshotState) ([]byte, error)
+	getSnapshot func(db.SnapshotState) (io.ReadCloser, error)
 	lastIndex   uint64 // index of log at start
 
 	confState     raftpb.ConfState
@@ -134,7 +135,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *
 	return rc
 }
 
-func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
+func (rc *raftNode) saveSnap(snap raftpb.Snapshot, stream io.Reader) error {
 	// must save the snapshot index to the WAL before saving the
 	// snapshot to maintain the invariant that we only Open the
 	// wal at previously-saved snapshot indexes.
@@ -145,7 +146,7 @@ func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
 	if err := rc.wal.SaveSnapshot(walSnap); err != nil {
 		return err
 	}
-	if err := rc.snapshotter.SaveSnap(snap); err != nil {
+	if err := rc.snapshotter.SaveSnaphot(snap, stream); err != nil {
 		return err
 	}
 	return rc.wal.ReleaseLockTo(snap.Metadata.Index)
@@ -221,9 +222,14 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 }
 
 func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
-	snapshot, err := rc.snapshotter.Load()
+	snapshot, data, err := rc.snapshotter.Load()
 	if err != nil && err != snap.ErrNoSnapshot {
 		log.Fatalf("nexus.raft: [Node %x] error loading snapshot (%v)", rc.id, err)
+	}
+	// this path only needs the snapshot metadata and
+	// hence closing the data reader right away
+	if data != nil {
+		_ = data.Close()
 	}
 	return snapshot
 }
@@ -406,11 +412,12 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	if err != nil {
 		log.Panic(err)
 	}
-	snapshot, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, data)
+	defer data.Close()
+	snapshot, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, nil)
 	if err != nil {
 		panic(err)
 	}
-	if err := rc.saveSnap(snapshot); err != nil {
+	if err := rc.saveSnap(snapshot, data); err != nil {
 		panic(err)
 	}
 
@@ -472,7 +479,10 @@ func (rc *raftNode) serveChannels() {
 			}
 			rc.wal.Save(rd.HardState, rd.Entries)
 			if !raft.IsEmptySnap(rd.Snapshot) {
-				rc.saveSnap(rd.Snapshot)
+				// we do not set the snapshot stream here since
+				// this case arises in case of unstable snapshots
+				// in which case the given snapshot will have data
+				rc.saveSnap(rd.Snapshot, nil)
 				rc.raftStorage.ApplySnapshot(rd.Snapshot)
 				rc.publishSnapshot(rd.Snapshot)
 			}

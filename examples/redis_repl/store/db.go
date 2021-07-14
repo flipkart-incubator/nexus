@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"github.com/flipkart-incubator/nexus/pkg/api"
 	"github.com/flipkart-incubator/nexus/pkg/db"
+	"io"
+	"io/ioutil"
 	"strconv"
 	"strings"
 	"time"
@@ -181,7 +183,7 @@ func (this *redisStore) loadAllData(redis_data_set []map[string][]byte, replacea
 	return nil
 }
 
-func (this *redisStore) Backup(_ db.SnapshotState) ([]byte, error) {
+func (this *redisStore) Backup(_ db.SnapshotState) (io.ReadCloser, error) {
 	defer this.statsCli.Timing("redis_backup.latency.ms", time.Now())
 	if data, err := this.extractAllData(); isRedisError(err) {
 		this.statsCli.Incr("backup.extract.error", 1)
@@ -192,19 +194,19 @@ func (this *redisStore) Backup(_ db.SnapshotState) ([]byte, error) {
 			this.statsCli.Incr("backup.encode.error", 1)
 			return nil, err
 		}
-		return buf.Bytes(), nil
+		return ioutil.NopCloser(&buf), nil
 	}
 }
 
-func (this *redisStore) Restore(data []byte) error {
+func (this *redisStore) Restore(data io.ReadCloser) error {
 	defer this.statsCli.Timing("redis_restore.latency.ms", time.Now())
-	var redis_data []map[string][]byte
-	buf := bytes.NewBuffer(data)
-	if err := gob.NewDecoder(buf).Decode(&redis_data); err != nil {
+	defer data.Close()
+	var redisData []map[string][]byte
+	if err := gob.NewDecoder(data).Decode(&redisData); err != nil {
 		this.statsCli.Incr("restore.decode.error", 1)
 		return err
 	}
-	if err := this.loadAllData(redis_data, this.restoreReplaceSupported()); isRedisError(err) {
+	if err := this.loadAllData(redisData, this.restoreReplaceSupported()); isRedisError(err) {
 		this.statsCli.Incr("restore.load.error", 1)
 		return err
 	}
