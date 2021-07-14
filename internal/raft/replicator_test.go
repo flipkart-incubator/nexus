@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/flipkart-incubator/nexus/pkg/db"
+	"math/rand"
 	"os"
 	"reflect"
 	"sort"
@@ -25,12 +26,14 @@ const (
 	snapDir     = "/tmp/nexus_test/snap"
 	clusterUrl  = "http://127.0.0.1:9321,http://127.0.0.1:9322,http://127.0.0.1:9323"
 	peer4Url    = "http://127.0.0.1:9324"
+	peer5Url    = "http://127.0.0.1:9325"
 	replTimeout = 3 * time.Second
 )
 
 var clus *cluster
 
 func TestReplicator(t *testing.T) {
+	rand.Seed(time.Now().UTC().UnixNano())
 	clus = startCluster(t)
 	defer clus.stop()
 
@@ -39,12 +42,43 @@ func TestReplicator(t *testing.T) {
 	t.Run("testSaveLoadLargeData", testSaveLoadLargeData)
 	t.Run("testLoadDuringRestarts", testLoadDuringRestarts)
 	t.Run("testForNewNexusNodeJoinLeaveCluster", testForNewNexusNodeJoinLeaveCluster)
+	t.Run("testSaveLoadReallyLargeData", testSaveLoadReallyLargeData)
+	t.Run("testForNewNexusNodeJoinHighDataClusterDataMismatch", testForNewNexusNodeJoinHighDataClusterDataMismatch)
 	t.Run("testForNodeRestart", testForNodeRestart)
 }
 
 func testListMembers(t *testing.T) {
 	members := strings.Split(clusterUrl, ",")
 	clus.assertMembers(t, members)
+}
+
+func testSaveLoadReallyLargeData(t *testing.T) {
+	var reqs []*kvReq
+	iterations := 125
+	// Saving
+	writePeer := clus.peers[0]
+	runId := writePeer.id
+	token := make([]byte, 1024*1024) //1mb
+	rand.Read(token)
+
+	for i := 0; i < iterations; i++ {
+		req1 := &kvReq{fmt.Sprintf("Key:KL%d#%d", runId, i), fmt.Sprintf("Val:%d#%d$%s", runId, i, token)}
+		writePeer.save(t, req1)
+		reqs = append(reqs, req1)
+		t.Logf("Write KEY : %s", req1.Key)
+	}
+
+	//assertions
+	clus.assertDB(t, reqs...)
+
+	//Read
+	for i := 0; i < iterations; i++ {
+		req1 := &kvReq{fmt.Sprintf("Key:KL%d#%d", runId, i), fmt.Sprintf("Val:%d#%d$%s", runId, i,token)}
+		actVal := writePeer.load(t, req1).(string)
+		if req1.Val != actVal {
+			t.Errorf("Value mismatch for peer: %d. Key: %s, Expected Value: %s, Actual Value: %s", writePeer.id, req1.Key, req1.Val, actVal)
+		}
+	}
 }
 
 func testSaveLoadLargeData(t *testing.T) {
@@ -199,6 +233,48 @@ func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 	}
 }
 
+func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
+	// create a new peer
+	if peer5, err := newJoiningPeer(peer5Url); err != nil {
+		t.Fatal(err)
+	} else {
+		// start the peer
+		peer5.start()
+		sleep(3)
+		peer1 := clus.peers[0]
+
+		// add peer to existing cluster
+		if err := peer1.repl.AddMember(context.Background(), peer5Url); err != nil {
+			t.Fatal(err)
+		}
+		sleep(3)
+		members := strings.Split(clusterUrl, ",")
+		members = append(members, peer5Url)
+		clus.assertMembers(t, members)
+
+		// insert data
+		db5, db1 := peer5.db.content, peer1.db.content
+		if reflect.DeepEqual(db5, db1) {
+			//Expect db mismatch as the db snapshot will not match, as that as not been synced.
+			t.Errorf("DB Match Not Expected !!!")
+		}
+
+		// assert membership across all nodes
+		peer5.assertMembers(t, peer5.getLeaderUrl(), members)
+
+		// remove this peer
+		if err := peer1.repl.RemoveMember(context.Background(), peer5Url); err != nil {
+			t.Fatal(err)
+		}
+		sleep(3)
+
+		// assert membership across all nodes
+		clus.assertMembers(t, members[0:len(members)-1])
+		peer5.stop()
+	}
+}
+
+
 func testForNodeRestart(t *testing.T) {
 	peer2 := clus.peers[1]
 	reqs := []*kvReq{&kvReq{"hello", "world"}, &kvReq{"foo", "bar"}}
@@ -316,8 +392,8 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 		raft.ClusterUrl(clusterUrl),
 		raft.ReplicationTimeout(replTimeout),
 		raft.LeaseBasedReads(false),
-		raft.SnapshotCatchUpEntries(100),
-		raft.SnapshotCount(100),
+		raft.SnapshotCatchUpEntries(25),
+		raft.SnapshotCount(50),
 		raft.MaxWALFiles(2),
 		raft.MaxSnapFiles(2),
 	)
