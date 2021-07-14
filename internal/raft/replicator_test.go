@@ -392,8 +392,8 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 		raft.ClusterUrl(clusterUrl),
 		raft.ReplicationTimeout(replTimeout),
 		raft.LeaseBasedReads(false),
-		raft.SnapshotCatchUpEntries(25),
-		raft.SnapshotCount(50),
+		raft.SnapshotCatchUpEntries(2500),
+		raft.SnapshotCount(5000),
 		raft.MaxWALFiles(2),
 		raft.MaxSnapFiles(2),
 	)
