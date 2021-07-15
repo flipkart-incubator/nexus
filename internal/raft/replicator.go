@@ -15,6 +15,7 @@ import (
 	"github.com/coreos/etcd/pkg/idutil"
 	"github.com/coreos/etcd/pkg/wait"
 	"github.com/coreos/etcd/raft/raftpb"
+	etcd_snap "github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
@@ -205,6 +206,32 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 		this.statsCli.Incr("config.change.timeout.error", 1)
 		return err
 	}
+}
+
+func (s *replicator) sendMergedSnap(merged etcd_snap.Message) {
+	//atomic.AddInt64(&s.inflightSnapshots, 1)
+
+
+
+	s.node.transport.SendSnapshot(merged)
+	//go func() {
+	//	select {
+	//	case ok := <-merged.CloseNotify():
+	//		// delay releasing inflight snapshot for another 30 seconds to
+	//		// block log compaction.
+	//		// If the follower still fails to catch up, it is probably just too slow
+	//		// to catch up. We cannot avoid the snapshot cycle anyway.
+	//		if ok {
+	//			select {
+	//			case <-time.After(releaseDelayAfterSnapshot):
+	//			case <-s.stopping:
+	//			}
+	//		}
+	//		atomic.AddInt64(&s.inflightSnapshots, -1)
+	//	case <-s.stopping:
+	//		return
+	//	}
+	//}()
 }
 
 func (this *replicator) readCommits() {

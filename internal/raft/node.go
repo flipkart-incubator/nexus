@@ -46,6 +46,10 @@ import (
 
 const (
 	purgeFileInterval = 30 * time.Second
+
+	// max number of in-flight snapshot messages nexus allows to have
+	// This number is more than enough for most clusters with 5 machines.
+	maxInFlightMsgSnap = 16
 )
 
 // A key-value stream backed by raft
@@ -53,6 +57,8 @@ type raftNode struct {
 	readStateC chan raft.ReadState // to send out readState
 	commitC    chan *raftpb.Entry  // entries committed to log (k,v)
 	errorC     chan error          // errors from raft session
+	msgSnapC  chan raftpb.Message 	// a chan to send/receive snapshot
+
 
 	id          uint64 // client ID for raft session
 	cid         uint64 //clusterId
@@ -118,6 +124,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *
 		statsCli:               statsCli,
 		maxSnapFiles:           opts.MaxSnapFiles(),
 		maxWALFiles:            opts.MaxWALFiles(),
+		msgSnapC:   make(chan raftpb.Message, maxInFlightMsgSnap),
 		// rest of structure populated after WAL replay
 	}
 
@@ -402,6 +409,30 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 	rc.appliedIndex = snapshotToSave.Metadata.Index
 }
 
+func (rc *raftNode) sendSnapshots(snapt, snapi uint64, confState raftpb.ConfState)  {
+	select {
+	// snapshot requested via send()
+	case m := <-rc.msgSnapC:
+		// put the []byte snapshot of store into raft snapshot and return the merged snapshot with
+		// KV readCloser snapshot.
+		snapshot := raftpb.Snapshot{
+			Metadata: raftpb.SnapshotMetadata{
+				Index:     snapi,
+				Term:      snapt,
+				ConfState: confState,
+			},
+			Data: nil,
+		}
+		m.Snapshot = snapshot
+		merged
+		return *snap.NewMessage(m, rc, dbsnap.Size())
+
+		merged := s.createMergedSnapshotMessage(m, ep.appliedt, ep.appliedi, ep.confState)
+		s.sendMergedSnap(merged)
+	default:
+	}
+}
+
 func (rc *raftNode) maybeTriggerSnapshot() {
 	if rc.appliedIndex-rc.snapshotIndex <= rc.snapCount {
 		return
@@ -487,7 +518,8 @@ func (rc *raftNode) serveChannels() {
 				rc.publishSnapshot(rd.Snapshot)
 			}
 			rc.raftStorage.Append(rd.Entries)
-			rc.transport.Send(rd.Messages)
+			msgs := rc.processMessages(rd.Messages)
+			rc.transport.Send(msgs)
 			if ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries)); !ok {
 				rc.stop()
 				return
@@ -504,6 +536,46 @@ func (rc *raftNode) serveChannels() {
 			return
 		}
 	}
+}
+
+func (r *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
+	//sentAppResp := false
+	for i := len(ms) - 1; i >= 0; i-- {
+		//if r.isIDRemoved(ms[i].To) {
+		//	ms[i].To = 0
+		//}
+
+		//if ms[i].Type == raftpb.MsgAppResp {
+		//	if sentAppResp {
+		//		ms[i].To = 0
+		//	} else {
+		//		sentAppResp = true
+		//	}
+		//}
+
+		if ms[i].Type == raftpb.MsgSnap {
+			// There are two separate data store: the store for v2, and the KV for v3.
+			// The msgSnap only contains the most recent snapshot of store without KV.
+			// So we need to redirect the msgSnap to etcd server main loop for merging in the
+			// current store snapshot and KV snapshot.
+			select {
+			case r.msgSnapC <- ms[i]:
+			default:
+				// drop msgSnap if the inflight chan if full.
+			}
+			ms[i].To = 0
+		}
+		//if ms[i].Type == raftpb.MsgHeartbeat {
+		//	ok, exceed := r.td.Observe(ms[i].To)
+		//	if !ok {
+		//		// TODO: limit request rate.
+		//		plog.Warningf("failed to send out heartbeat on time (exceeded the %v timeout for %v, to %x)", r.heartbeat, exceed, ms[i].To)
+		//		plog.Warningf("server is likely overloaded")
+		//		heartbeatSendFailures.Inc()
+		//	}
+		//}
+	}
+	return ms
 }
 
 func (rc *raftNode) serveRaft() {
@@ -530,8 +602,12 @@ func (rc *raftNode) Process(ctx context.Context, m raftpb.Message) error {
 	return rc.node.Step(ctx, m)
 }
 func (rc *raftNode) IsIDRemoved(id uint64) bool                           { return false }
-func (rc *raftNode) ReportUnreachable(id uint64)                          {}
-func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {}
+func (rc *raftNode) ReportUnreachable(id uint64)                          {
+	rc.node.ReportUnreachable(id)
+}
+func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {
+	rc.node.ReportSnapshot(id, status)
+}
 
 type stoppableListener struct {
 	*net.TCPListener
