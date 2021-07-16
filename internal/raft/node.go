@@ -19,6 +19,7 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
+	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
 	"log"
@@ -30,7 +31,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/flipkart-incubator/nexus/internal/raft/snap"
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
 
@@ -428,7 +428,7 @@ func (rc *raftNode) sendSnapshots(snapt, snapi uint64, confState raftpb.ConfStat
 		return *snap.NewMessage(m, rc, dbsnap.Size())
 
 		merged := s.createMergedSnapshotMessage(m, ep.appliedt, ep.appliedi, ep.confState)
-		s.sendMergedSnap(merged)
+		rc.transport.SendSnapshot(merged)
 	default:
 	}
 }
