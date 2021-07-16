@@ -96,7 +96,7 @@ func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 		ch := this.waiter.Register(repl_req.ID)
 		child_ctx, cancel := context.WithTimeout(ctx, this.opts.ReplTimeout())
 		defer cancel()
-		if err := this.node.node.Propose(child_ctx, repl_req_data); err != nil {
+		if err = this.node.node.Propose(child_ctx, repl_req_data); err != nil {
 			log.Printf("[WARN] [Node %x] Error while proposing to Raft. Message: %v.", this.node.id, err)
 			this.waiter.Trigger(repl_req.ID, &internalNexusResponse{Err: err})
 			this.statsCli.Incr("raft.propose.error", 1)
@@ -158,7 +158,7 @@ func (this *replicator) AddMember(ctx context.Context, nodeUrl string) error {
 		return err
 	}
 	nodeAddr := nodeOpts.NodeUrl()
-	if _, err := net.Dial("tcp", nodeAddr.Host); err != nil {
+	if _, err = net.Dial("tcp", nodeAddr.Host); err != nil {
 		return fmt.Errorf("unable to verify RAFT service running at %s, error: %v", nodeAddr, err)
 	}
 	cc := raftpb.ConfChange{

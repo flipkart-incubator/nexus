@@ -44,8 +44,8 @@ func TestReplicator(t *testing.T) {
 	t.Run("testSaveLoadLargeData", testSaveLoadLargeData)
 	t.Run("testLoadDuringRestarts", testLoadDuringRestarts)
 	t.Run("testForNewNexusNodeJoinLeaveCluster", testForNewNexusNodeJoinLeaveCluster)
-	//t.Run("testSaveLoadReallyLargeData", testSaveLoadReallyLargeData)
-	//t.Run("testForNewNexusNodeJoinHighDataClusterDataMismatch", testForNewNexusNodeJoinHighDataClusterDataMismatch)
+	t.Run("testSaveLoadReallyLargeData", testSaveLoadReallyLargeData)
+	t.Run("testForNewNexusNodeJoinHighDataClusterDataMismatch", testForNewNexusNodeJoinHighDataClusterDataMismatch)
 	t.Run("testForNodeRestart", testForNodeRestart)
 }
 
@@ -224,14 +224,14 @@ func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 		peer4.assertMembers(t, peer4.getLeaderUrl(), members)
 
 		//// remove this peer
-		//if err = peer1.repl.RemoveMember(context.Background(), peer4Url); err != nil {
-		//	t.Fatal(err)
-		//}
-		//sleep(3)
-		//
-		//// assert membership across all nodes
-		//clus.assertMembers(t, members[0:len(members)-1])
-		//peer4.stop()
+		if err = peer1.repl.RemoveMember(context.Background(), peer4Url); err != nil {
+			t.Fatal(err)
+		}
+		sleep(3)
+
+		// assert membership across all nodes
+		clus.assertMembers(t, members[0:len(members)-1])
+		peer4.stop()
 	}
 }
 

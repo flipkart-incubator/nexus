@@ -199,15 +199,15 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry, snap raftpb.Snapshot ) (
 		return nil, true
 	}
 
-	data := make([]raftpb.Entry, 0, len(ents))
+	//data := make([]raftpb.Entry, 0, len(ents))
 	for i := range ents {
 		switch ents[i].Type {
 		case raftpb.EntryNormal: // nothing to do but leaving for clarity
-			if len(ents[i].Data) == 0 {
-				// ignore empty messages
-				break
-			}
-			data = append(data, ents[i])
+			//if len(ents[i].Data) == 0 {
+			//	// ignore empty messages
+			//	break
+			//}
+			//data = append(data, ents[i])
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
 			cc.Unmarshal(ents[i].Data)
@@ -236,10 +236,10 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry, snap raftpb.Snapshot ) (
 
 	var applyDoneC chan struct{}
 
-	if len(data) > 0 {
+	if len(ents) > 0 {
 		applyDoneC = make(chan struct{}, 1)
 		select {
-		case rc.commitC <- &apply{data: data, applyDoneC: applyDoneC, snapshot: snap}:
+		case rc.commitC <- &apply{data: ents, applyDoneC: applyDoneC, snapshot: snap}:
 		case <-rc.stopc:
 			return nil, false
 		}
@@ -551,7 +551,6 @@ func (rc *raftNode) serveChannels() {
 				rc.stop()
 				return
 			}
-
 
 			if err = rc.wal.Save(rd.HardState, rd.Entries); err != nil {
 				log.Fatalf("raft save state and entries error: %v", err)
