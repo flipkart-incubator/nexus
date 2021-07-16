@@ -1,12 +1,13 @@
 package raft
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
 	"github.com/flipkart-incubator/nexus/internal/models"
-	"github.com/flipkart-incubator/nexus/internal/raft/snap"
 	"github.com/golang/protobuf/proto"
+	"io/ioutil"
 	"log"
 	"net"
 	"sync/atomic"
@@ -15,7 +16,7 @@ import (
 	"github.com/coreos/etcd/pkg/idutil"
 	"github.com/coreos/etcd/pkg/wait"
 	"github.com/coreos/etcd/raft/raftpb"
-	etcd_snap "github.com/coreos/etcd/snap"
+	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
@@ -71,9 +72,10 @@ func (this *replicator) Id() uint64 {
 }
 
 func (this *replicator) Start() {
+	this.node.startRaft()
+	this.restoreFromSnapshot()
 	go this.readCommits()
 	go this.readReadStates()
-	this.node.startRaft()
 	go this.node.purgeFile()
 }
 
@@ -208,51 +210,50 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 	}
 }
 
-func (s *replicator) sendMergedSnap(merged etcd_snap.Message) {
-	//atomic.AddInt64(&s.inflightSnapshots, 1)
-
-
-
-	s.node.transport.SendSnapshot(merged)
-	//go func() {
-	//	select {
-	//	case ok := <-merged.CloseNotify():
-	//		// delay releasing inflight snapshot for another 30 seconds to
-	//		// block log compaction.
-	//		// If the follower still fails to catch up, it is probably just too slow
-	//		// to catch up. We cannot avoid the snapshot cycle anyway.
-	//		if ok {
-	//			select {
-	//			case <-time.After(releaseDelayAfterSnapshot):
-	//			case <-s.stopping:
-	//			}
-	//		}
-	//		atomic.AddInt64(&s.inflightSnapshots, -1)
-	//	case <-s.stopping:
-	//		return
-	//	}
-	//}()
+func (this *replicator) restoreFromSnapshot()   {
+	snapshot, err := this.node.snapshotter.Load()
+	if err == snap.ErrNoSnapshot {
+		log.Printf("[Node %x] WARNING - Received no snapshot error", this.node.id)
+		return
+	}
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Printf("[Node %x] Loading snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
+	reader := ioutil.NopCloser(bytes.NewBuffer(snapshot.Data))
+	if err = this.store.Restore(reader); err != nil {
+		log.Panic(err)
+	}
+	log.Printf("[Node %x] Restored snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
 }
 
 func (this *replicator) readCommits() {
-	for entry := range this.node.commitC {
-		if entry == nil {
+	for _commit := range this.node.commitC {
+		if _commit == nil {
 			log.Printf("[Node %x] Received a message in the commit channel with no data", this.node.id)
-			snapshot, data, err := this.node.snapshotter.Load()
-			if err == snap.ErrNoSnapshot {
-				log.Printf("[Node %x] WARNING - Received no snapshot error", this.node.id)
-				continue
-			}
-			if err != nil {
-				log.Panic(err)
-			}
-			log.Printf("[Node %x] Loading snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
-			if err = this.store.Restore(data); err != nil {
-				log.Panic(err)
-			}
-			log.Printf("[Node %x] Loaded Snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
-		} else {
-			if len(entry.Data) > 0 {
+			this.restoreFromSnapshot()
+			continue
+		}
+
+		//if entry == nil {
+		//	log.Printf("[Node %x] Received a message in the commit channel with no data", this.node.id)
+		//	snapshot, data, err := this.node.snapshotter.Load()
+		//	if err == snap.ErrNoSnapshot {
+		//		log.Printf("[Node %x] WARNING - Received no snapshot error", this.node.id)
+		//		continue
+		//	}
+		//	if err != nil {
+		//		log.Panic(err)
+		//	}
+		//	log.Printf("[Node %x] Loading snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
+		//	if err = this.store.Restore(data); err != nil {
+		//		log.Panic(err)
+		//	}
+		//	log.Printf("[Node %x] Loaded Snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
+		//} else {
+
+			for _, entry := range _commit.data {
+				if len(entry.Data) > 0 {
 				switch entry.Type {
 				case raftpb.EntryNormal:
 					var replReq models.NexusInternalRequest
@@ -276,11 +277,42 @@ func (this *replicator) readCommits() {
 			// signal any linearizable reads blocked for this index
 			this.applyWait.Trigger(entry.Index)
 		}
+
+		this.node.maybeTriggerSnapshot(_commit.applyDoneC)
+
+		close(_commit.applyDoneC)
 	}
+
 	if err, present := <-this.node.errorC; present {
 		log.Fatal(err)
 	}
 }
+
+//func (s *replicator) sendMergedSnap(merged etcd_snap.Message) {
+//	//atomic.AddInt64(&s.inflightSnapshots, 1)
+//
+//
+//
+//	s.node.transport.SendSnapshot(merged)
+//	//go func() {
+//	//	select {
+//	//	case ok := <-merged.CloseNotify():
+//	//		// delay releasing inflight snapshot for another 30 seconds to
+//	//		// block log compaction.
+//	//		// If the follower still fails to catch up, it is probably just too slow
+//	//		// to catch up. We cannot avoid the snapshot cycle anyway.
+//	//		if ok {
+//	//			select {
+//	//			case <-time.After(releaseDelayAfterSnapshot):
+//	//			case <-s.stopping:
+//	//			}
+//	//		}
+//	//		atomic.AddInt64(&s.inflightSnapshots, -1)
+//	//	case <-s.stopping:
+//	//		return
+//	//	}
+//	//}()
+//}
 
 func (this *replicator) readReadStates() {
 	for rd := range this.node.readStateC {
