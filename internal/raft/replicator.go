@@ -278,14 +278,44 @@ func (this *replicator) readCommits() {
 			this.applyWait.Trigger(entry.Index)
 		}
 
-		this.node.maybeTriggerSnapshot(_commit.applyDoneC)
 
 		close(_commit.applyDoneC)
 	}
 
+	this.sendSnapshots()
+
 	if err, present := <-this.node.errorC; present {
 		log.Fatal(err)
 	}
+}
+
+func (this *replicator) sendSnapshots() error {
+	select {
+	// snapshot requested via send()
+	case m := <-this.node.msgSnapC:
+		//load latest snapshot
+		currentSnap,  err := this.node.snapshotter.Load()
+		if err != nil {
+			return err
+		}
+
+		// put the []byte snapshot of store into raft snapshot and return the merged snapshot with
+		// KV readCloser snapshot.
+		snapshot := raftpb.Snapshot{
+			Metadata: currentSnap.Metadata,
+			Data: nil,
+		}
+		m.Snapshot = snapshot
+
+		rc := ioutil.NopCloser(bytes.NewReader(currentSnap.Data))
+		mergedSnap := *snap.NewMessage(m, rc, int64(len(currentSnap.Data)))
+
+		this.node.transport.SendSnapshot(mergedSnap)
+	default:
+		fmt.Println("No pending snapshot request")
+	}
+
+	return nil
 }
 
 //func (s *replicator) sendMergedSnap(merged etcd_snap.Message) {

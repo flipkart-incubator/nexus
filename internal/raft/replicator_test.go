@@ -246,7 +246,7 @@ func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
 		peer1 := clus.peers[0]
 
 		// add peer to existing cluster
-		if err := peer1.repl.AddMember(context.Background(), peer5Url); err != nil {
+		if err = peer1.repl.AddMember(context.Background(), peer5Url); err != nil {
 			t.Fatal(err)
 		}
 		sleep(3)
@@ -265,7 +265,7 @@ func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
 		peer5.assertMembers(t, peer5.getLeaderUrl(), members)
 
 		// remove this peer
-		if err := peer1.repl.RemoveMember(context.Background(), peer5Url); err != nil {
+		if err = peer1.repl.RemoveMember(context.Background(), peer5Url); err != nil {
 			t.Fatal(err)
 		}
 		sleep(3)

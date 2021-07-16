@@ -19,6 +19,7 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
@@ -438,43 +439,19 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 	rc.appliedIndex = snapshotToSave.Metadata.Index
 }
 
-/*func (rc *raftNode) sendSnapshots(snapt, snapi uint64, confState raftpb.ConfState)  {
-	select {
-	// snapshot requested via send()
-	case m := <-rc.msgSnapC:
-		// put the []byte snapshot of store into raft snapshot and return the merged snapshot with
-		// KV readCloser snapshot.
-		snapshot := raftpb.Snapshot{
-			Metadata: raftpb.SnapshotMetadata{
-				Index:     snapi,
-				Term:      snapt,
-				ConfState: confState,
-			},
-			Data: nil,
-		}
-		m.Snapshot = snapshot
-		merged
-		return *snap.NewMessage(m, rc, dbsnap.Size())
-
-		merged := s.createMergedSnapshotMessage(m, ep.appliedt, ep.appliedi, ep.confState)
-		rc.transport.SendSnapshot(merged)
-	default:
-	}
-}*/
-
-func (rc *raftNode) maybeTriggerSnapshot(_ <-chan struct{}) {
+func (rc *raftNode) maybeTriggerSnapshot(applyDoneC <-chan struct{}) {
 	if rc.appliedIndex-rc.snapshotIndex <= rc.snapCount {
 		return
 	}
 
 	//// wait until all committed entries are applied (or server is closed)
-	//if applyDoneC != nil {
-	//	select {
-	//	case <-applyDoneC:
-	//	case <-rc.stopc:
-	//		return
-	//	}
-	//}
+	if applyDoneC != nil {
+		select {
+		case <-applyDoneC:
+		case <-rc.stopc:
+			return
+		}
+	}
 
 	log.Printf("nexus.raft: [Node %x] start snapshot [applied index: %d | last snapshot index: %d]", rc.id, rc.appliedIndex, rc.snapshotIndex)
 	data, err := rc.getSnapshot(db.SnapshotState{SnapshotIndex: rc.snapshotIndex, AppliedIndex: rc.appliedIndex})
@@ -569,14 +546,14 @@ func (rc *raftNode) serveChannels() {
 
 
 			// finish processing incoming messages before we signal raftdone chan
-			//msgs := rc.processMessages(rd.Messages)
-			_, ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries), rd.Snapshot)
+			msgs := rc.processMessages(rd.Messages)
+			applyDoneC, ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries), rd.Snapshot)
 			if !ok {
 				rc.stop()
 				return
 			}
-			//rc.maybeTriggerSnapshot(applyDoneC)
-			rc.transport.Send(rd.Messages)
+			rc.maybeTriggerSnapshot(applyDoneC)
+			rc.transport.Send(msgs)
 
 			rc.node.Advance()
 
@@ -611,6 +588,7 @@ func (r *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 			// The msgSnap only contains the most recent snapshot of store without KV.
 			// So we need to redirect the msgSnap to etcd server main loop for merging in the
 			// current store snapshot and KV snapshot.
+			fmt.Println("GOOooooooot raftpb.MsgSnap REQUEST")
 			select {
 			case r.msgSnapC <- ms[i]:
 			default:
