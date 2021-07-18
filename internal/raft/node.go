@@ -15,12 +15,14 @@
 package raft
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -146,7 +148,7 @@ func (rc *raftNode) saveSnap(snap raftpb.Snapshot, stream io.Reader) error {
 	if err := rc.wal.SaveSnapshot(walSnap); err != nil {
 		return err
 	}
-	if err := rc.snapshotter.SaveSnaphot(snap, stream); err != nil {
+	if err := rc.snapshotter.SaveSnapshot(snap, stream); err != nil {
 		return err
 	}
 	return rc.wal.ReleaseLockTo(snap.Metadata.Index)
@@ -222,14 +224,14 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 }
 
 func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
-	snapshot, data, err := rc.snapshotter.Load()
+	snapshot, data, err := rc.snapshotter.LoadSnapshot()
 	if err != nil && err != snap.ErrNoSnapshot {
 		log.Fatalf("nexus.raft: [Node %x] error loading snapshot (%v)", rc.id, err)
 	}
-	// this path only needs the snapshot metadata and
-	// hence closing the data reader right away
-	if data != nil {
-		_ = data.Close()
+	if snapshot != nil && data != nil {
+		defer data.Close()
+		// FIXME(kalyan) - Prevent this !!!
+		snapshot.Data, _ = ioutil.ReadAll(data)
 	}
 	return snapshot
 }
@@ -479,10 +481,7 @@ func (rc *raftNode) serveChannels() {
 			}
 			rc.wal.Save(rd.HardState, rd.Entries)
 			if !raft.IsEmptySnap(rd.Snapshot) {
-				// we do not set the snapshot stream here since
-				// this case arises in case of unstable snapshots
-				// in which case the given snapshot will have data
-				rc.saveSnap(rd.Snapshot, nil)
+				rc.saveSnap(rd.Snapshot, bytes.NewReader(rd.Snapshot.Data))
 				rc.raftStorage.ApplySnapshot(rd.Snapshot)
 				rc.publishSnapshot(rd.Snapshot)
 			}

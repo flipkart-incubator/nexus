@@ -45,12 +45,12 @@ func TestSaveAndLoad(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 	ss := New(dir)
-	err = ss.SaveSnaphot(*testSnap, bytes.NewReader(testSnap.Data))
+	err = ss.SaveSnapshot(*testSnap, bytes.NewReader(testSnap.Data))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	g, data, err := ss.Load()
+	g, data, err := ss.LoadSnapshot()
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
 	}
@@ -76,12 +76,12 @@ func TestFailback(t *testing.T) {
 	}
 
 	ss := New(dir)
-	err = ss.SaveSnaphot(*testSnap, bytes.NewReader(testSnap.Data))
+	err = ss.SaveSnapshot(*testSnap, bytes.NewReader(testSnap.Data))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	g, data, err := ss.Load()
+	g, data, err := ss.LoadSnapshot()
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
 	}
@@ -134,19 +134,19 @@ func TestLoadNewestSnap(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 	ss := New(dir)
-	err = ss.SaveSnaphot(*testSnap, bytes.NewReader(testSnap.Data))
+	err = ss.SaveSnapshot(*testSnap, bytes.NewReader(testSnap.Data))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	newSnap := *testSnap
 	newSnap.Metadata.Index = 5
-	err = ss.SaveSnaphot(newSnap, bytes.NewReader(newSnap.Data))
+	err = ss.SaveSnapshot(newSnap, bytes.NewReader(newSnap.Data))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	g, data, err := ss.Load()
+	g, data, err := ss.LoadSnapshot()
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
 	}
@@ -165,7 +165,7 @@ func TestNoSnapshot(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 	ss := New(dir)
-	_, _, err = ss.Load()
+	_, _, err = ss.LoadSnapshot()
 	if err != ErrNoSnapshot {
 		t.Errorf("err = %v, want %v", err, ErrNoSnapshot)
 	}
@@ -206,7 +206,7 @@ func TestAllSnapshotBroken(t *testing.T) {
 	}
 
 	ss := New(dir)
-	_, _, err = ss.Load()
+	_, _, err = ss.LoadSnapshot()
 	if err != ErrNoSnapshot {
 		t.Errorf("err = %v, want %v", err, ErrNoSnapshot)
 	}

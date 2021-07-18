@@ -211,7 +211,7 @@ func (this *replicator) readCommits() {
 	for entry := range this.node.commitC {
 		if entry == nil {
 			log.Printf("[Node %x] Received a message in the commit channel with no data", this.node.id)
-			snapshot, data, err := this.node.snapshotter.Load()
+			snapshot, data, err := this.node.snapshotter.LoadSnapshot()
 			if err == snap.ErrNoSnapshot {
 				log.Printf("[Node %x] WARNING - Received no snapshot error", this.node.id)
 				continue

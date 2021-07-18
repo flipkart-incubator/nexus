@@ -42,7 +42,7 @@ func New(dir string) *Snapshotter {
 	}
 }
 
-func (s *Snapshotter) SaveSnaphot(snapshot raftpb.Snapshot, stream io.Reader) error {
+func (s *Snapshotter) SaveSnapshot(snapshot raftpb.Snapshot, stream io.Reader) error {
 	if raft.IsEmptySnap(snapshot) {
 		return nil
 	}
@@ -52,7 +52,7 @@ func (s *Snapshotter) SaveSnaphot(snapshot raftpb.Snapshot, stream io.Reader) er
 func (s *Snapshotter) saveSnapshot(snapshot *raftpb.Snapshot, stream io.Reader) error {
 	fname := fmt.Sprintf("%016x-%016x%s", snapshot.Metadata.Term, snapshot.Metadata.Index, snapSuffix)
 	snapFile := filepath.Join(s.dir, fname)
-	err := s.writeSnapshot(snapFile, snapshot, stream, 0666)
+	err := s.writeSnap(snapFile, snapshot, stream, 0666)
 	if err != nil {
 		err1 := os.Remove(snapFile)
 		if err1 != nil {
@@ -62,7 +62,7 @@ func (s *Snapshotter) saveSnapshot(snapshot *raftpb.Snapshot, stream io.Reader) 
 	return err
 }
 
-func (s *Snapshotter) writeSnapshot(snapFile string, snapshot *raftpb.Snapshot, data io.Reader, perm os.FileMode) error {
+func (s *Snapshotter) writeSnap(snapFile string, snapshot *raftpb.Snapshot, data io.Reader, perm os.FileMode) error {
 	f, err := os.OpenFile(snapFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return err
@@ -94,7 +94,7 @@ func (s *Snapshotter) writeSnapshot(snapFile string, snapshot *raftpb.Snapshot, 
 	return err
 }
 
-func (s *Snapshotter) Load() (*raftpb.Snapshot, io.ReadCloser, error) {
+func (s *Snapshotter) LoadSnapshot() (*raftpb.Snapshot, io.ReadCloser, error) {
 	names, err := s.snapNames()
 	if err != nil {
 		return nil, nil, err
