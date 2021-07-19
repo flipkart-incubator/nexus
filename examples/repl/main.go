@@ -136,23 +136,20 @@ func listNodes(nexus_url string) {
 }
 
 func listNodesUsingCli(nc *grpc.NexusClient) {
-	leader, members := nc.ListNodes()
+	leaderId, members := nc.ListNodes()
 	var ids []uint64
 	for id := range members {
-		if id != leader {
-			ids = append(ids, id)
-		}
+		ids = append(ids, id)
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	if leaderUrl, present := members[leader]; present {
+	if _, present := members[leaderId]; present {
 		fmt.Println("Current cluster members:")
-		fmt.Printf("%x => %s (leader)\n", leader, leaderUrl)
 	} else {
 		fmt.Println("WARNING: Cluster unhealthy, leader unknown")
 		fmt.Println("Current cluster members:")
 	}
 	for _, id := range ids {
-		fmt.Printf("%x => %s\n", id, members[id])
+		fmt.Printf("%x => %s (%s) \n", id, members[id].NodeUrl, members[id].Status)
 	}
 }
 

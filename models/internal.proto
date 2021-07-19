@@ -1,0 +1,22 @@
+syntax = "proto3";
+package models;
+option go_package = "github.com/flipkart-incubator/nexus/models";
+
+message NexusInternalRequest{
+  uint64 ID = 1;
+  bytes Req = 2;
+}
+
+message NodeInfo {
+  enum NodeStatus {
+    LEADER = 0;
+    CANDIDATE = 1;
+    FOLLOWER = 2;
+    OFFLINE = 3;
+    UNKNOWN = 4;
+  }
+
+  string nodeUrl = 1;
+  uint64 nodeId = 2;
+  NodeStatus status = 3;
+}

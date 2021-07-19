@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"github.com/flipkart-incubator/nexus/models"
 	"time"
 
 	"github.com/flipkart-incubator/nexus/pkg/api"
@@ -95,7 +96,7 @@ func (this *NexusClient) RemoveNode(nodeUrl string) error {
 	return nil
 }
 
-func (this *NexusClient) ListNodes() (uint64, map[uint64]string) {
+func (this *NexusClient) ListNodes() (uint64, map[uint64]*models.NodeInfo) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 	res, _ := this.nexusCli.ListNodes(ctx, &empty.Empty{})
