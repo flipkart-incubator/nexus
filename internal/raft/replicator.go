@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path"
 	"sync/atomic"
 	"time"
 
@@ -73,6 +74,7 @@ func (this *replicator) Id() uint64 {
 func (this *replicator) Start() {
 	this.node.startRaft()
 	this.restoreFromSnapshot()
+	go this.sendSnapshots()
 	go this.readCommits()
 	go this.readReadStates()
 	go this.node.purgeFile()
@@ -224,7 +226,8 @@ func (this *replicator) restoreFromSnapshot() {
 	//indexId := binary.LittleEndian.Uint64(snapshot.Data)
 	dbFile, err := this.node.snapshotter.DBFilePath(snapshot.Metadata.Index)
 	if err != nil {
-		log.Fatalf("[Node %x] Failed to load db file for snapshot index %d", this.node.id, snapshot.Metadata.Index )
+		log.Printf("[Node %x] Failed to load db file for snapshot index %d", this.node.id, snapshot.Metadata.Index)
+		return
 	}
 
 	reader, err := os.Open(dbFile)
@@ -273,10 +276,10 @@ func (this *replicator) readCommits() {
 		}
 
 		close(_commit.applyDoneC)
-	}
 
-	if err := this.sendSnapshots(); err != nil {
-		log.Fatal(err)
+		//if err := this.sendSnapshots(); err != nil {
+		//	log.Fatal(err)
+		//}
 	}
 
 	if err, present := <-this.node.errorC; present {
@@ -285,61 +288,65 @@ func (this *replicator) readCommits() {
 }
 
 func (this *replicator) sendSnapshots() error {
-	select {
-	// snapshot requested via send()
-	case m := <-this.node.msgSnapC:
-		log.Printf("nexus.raft: [Node %x] Request to send snapshot to  %d at Term %d, Index %d", this.node.id, m.To, m.Term, m.Index)
+	for {
+		select {
+		// snapshot requested via send()
+		case m := <-this.node.msgSnapC:
+			log.Printf("nexus.raft: [Node %x] Request to send snapshot to  %d at Term %d, Index %d \n", this.node.id, m.To, m.Term, m.Index)
 
-		//load latest snapshot
-		currentSnap, err := this.node.snapshotter.Load()
-		if err != nil {
-			return err
-		}
+			//load latest snapshot
+			currentSnap, err := this.node.snapshotter.Load()
+			if err != nil {
+				return err
+			}
 
-		// put the []byte snapshot of store into raft snapshot and return the merged snapshot with
-		// KV readCloser snapshot.
-		snapshot := raftpb.Snapshot{
-			Metadata: currentSnap.Metadata,
-			Data:     nil,
-		}
-		m.Snapshot = snapshot
+			// put the []byte snapshot of store into raft snapshot and return the merged snapshot with
+			// KV readCloser snapshot.
+			snapshot := raftpb.Snapshot{
+				Metadata: currentSnap.Metadata,
+				Data:     nil,
+			}
+			m.Snapshot = snapshot
 
-		//file data
-		//indexId := binary.LittleEndian.Uint64(currentSnap.Data)
-		dbFile, err := this.node.snapshotter.DBFilePath(currentSnap.Metadata.Index)
-		if err != nil {
-			return err
-		}
-		rc, err := os.Open(dbFile)
-		if err != nil {
-			return err
-		}
-		stat, _ := rc.Stat()
-		mergedSnap := *snap.NewMessage(m, rc, stat.Size())
-		fmt.Println("Sending mergedSnap snapshot")
+			//file data
+			//indexId := binary.LittleEndian.Uint64(currentSnap.Data)
+			dbFile, err := this.node.snapshotter.DBFilePath(currentSnap.Metadata.Index)
+			if err != nil {
+				return err
+			}
+			rc, err := os.Open(dbFile)
+			if err != nil {
+				return err
+			}
+			stat, _ := rc.Stat()
+			mergedSnap := *snap.NewMessage(m, rc, stat.Size())
+			fmt.Println("Sending mergedSnap snapshot")
 
-		//atomic.AddInt64(&s.inflightSnapshots, 1)
-		this.node.transport.SendSnapshot(mergedSnap)
-		//go func() {
-		//	select {
-		//	case ok := <-merged.CloseNotify():
-		//		// delay releasing inflight snapshot for another 30 seconds to
-		//		// block log compaction.
-		//		// If the follower still fails to catch up, it is probably just too slow
-		//		// to catch up. We cannot avoid the snapshot cycle anyway.
-		//		if ok {
-		//			select {
-		//			case <-time.After(releaseDelayAfterSnapshot):
-		//			case <-s.stopping:
-		//			}
-		//		}
-		//		atomic.AddInt64(&s.inflightSnapshots, -1)
-		//	case <-s.stopping:
-		//		return
-		//	}
-		//}()
-	default:
-		fmt.Println("No pending snapshot request")
+			log.Printf("nexus.raft: [Node %x] Sending snap(T%d)+db(%s) snapshot to  %x \n", this.node.id, snapshot.Metadata.Index ,path.Base(dbFile), m.To)
+
+			//atomic.AddInt64(&s.inflightSnapshots, 1)
+			this.node.transport.SendSnapshot(mergedSnap)
+			//go func() {
+			//	select {
+			//	case ok := <-merged.CloseNotify():
+			//		// delay releasing inflight snapshot for another 30 seconds to
+			//		// block log compaction.
+			//		// If the follower still fails to catch up, it is probably just too slow
+			//		// to catch up. We cannot avoid the snapshot cycle anyway.
+			//		if ok {
+			//			select {
+			//			case <-time.After(releaseDelayAfterSnapshot):
+			//			case <-s.stopping:
+			//			}
+			//		}
+			//		atomic.AddInt64(&s.inflightSnapshots, -1)
+			//	case <-s.stopping:
+			//		return
+			//	}
+			//}()
+			//default:
+			// No pending snapshot request
+		}
 	}
 
 	return nil

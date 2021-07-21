@@ -384,6 +384,7 @@ func (rc *raftNode) startRaft() {
 		ServerStats: etcd_stats.NewServerStats("", ""),
 		LeaderStats: etcd_stats.NewLeaderStats(strconv.Itoa(int(rc.id))),
 		ErrorC:      make(chan error),
+		Snapshotter: rc.snapshotter,
 	}
 
 	rc.transport.Start()
@@ -651,7 +652,7 @@ func (rc *raftNode) purgeFile() {
 	}
 
 	if rc.maxSnapFiles > 0 {
-			derrc = fileutil.PurgeFile(rc.snapdir, "snap.db", rc.maxSnapFiles, purgeFileInterval, rc.stopc)
+		derrc = fileutil.PurgeFile(rc.snapdir, "snap.db", rc.maxSnapFiles, purgeFileInterval, rc.stopc)
 	}
 
 	if rc.maxWALFiles > 0 {
