@@ -291,6 +291,7 @@ func (this *replicator) sendSnapshots() error {
 		}
 		m.Snapshot = snapshot
 
+		//TODO (kinshuk) : Get io.stream of sst file.
 		rc := ioutil.NopCloser(bytes.NewReader(currentSnap.Data))
 		mergedSnap := *snap.NewMessage(m, rc, int64(len(currentSnap.Data)))
 		fmt.Println("Sending mergedSnap snapshot")

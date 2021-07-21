@@ -199,15 +199,9 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry, snap raftpb.Snapshot) (<
 		return nil, true
 	}
 
-	//data := make([]raftpb.Entry, 0, len(ents))
 	for i := range ents {
 		switch ents[i].Type {
 		case raftpb.EntryNormal: // nothing to do but leaving for clarity
-			//if len(ents[i].Data) == 0 {
-			//	// ignore empty messages
-			//	break
-			//}
-			//data = append(data, ents[i])
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
 			cc.Unmarshal(ents[i].Data)
@@ -234,29 +228,15 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry, snap raftpb.Snapshot) (<
 		}
 	}
 
-	var applyDoneC chan struct{}
-
-	if len(ents) > 0 {
-		applyDoneC = make(chan struct{}, 1)
-		select {
-		case rc.commitC <- &apply{data: ents, applyDoneC: applyDoneC, snapshot: snap}:
-		case <-rc.stopc:
-			return nil, false
-		}
+	applyDoneC := make(chan struct{}, 1)
+	select {
+	case rc.commitC <- &apply{data: ents, applyDoneC: applyDoneC, snapshot: snap}:
+	case <-rc.stopc:
+		return nil, false
 	}
 
 	// after commit, update appliedIndex
 	rc.appliedIndex = ents[len(ents)-1].Index
-
-	//	// special nil commit to signal replay has finished
-	//	if rc.appliedIndex == rc.lastIndex {
-	//		select {
-	//		case rc.commitC <- nil:
-	//		case <-rc.stopc:
-	//			return nil ,false
-	//		}
-	//	}
-	//}
 	return applyDoneC, true
 }
 
@@ -316,7 +296,7 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 
 	// append to storage so raft starts at the right place in log
 	rc.raftStorage.Append(ents)
-	//// send nil once lastIndex is published so client knows commit channel is current
+	// send nil once lastIndex is published so client knows commit channel is current
 	//if len(ents) > 0 {
 	//	rc.lastIndex = ents[len(ents)-1].Index
 	//} else {
