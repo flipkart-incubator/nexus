@@ -15,6 +15,7 @@
 package raft
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/binary"
@@ -247,6 +248,16 @@ func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
 			log.Fatalf("nexus.raft: [Node %x] error loading snapshot (%v)", rc.id, err)
 		}
 		return snapshot
+
+		//snapshot, data, err := rc.snapshotter.LoadSnapshot()
+		//if err != nil && err != snap.ErrNoSnapshot {
+		//	log.Fatalf("nexus.raft: [Node %x] error loading snapshot (%v)", rc.id, err)
+		//}
+		//if snapshot != nil && data != nil {
+		//	defer data.Close()
+		//	// FIXME(kalyan) - Prevent this !!!
+		//	snapshot.Data, _ = ioutil.ReadAll(data)
+		//}
 	}
 	return nil
 }
@@ -512,10 +523,11 @@ func (rc *raftNode) serveChannels() {
 			}
 
 			if !raft.IsEmptySnap(rd.Snapshot) {
+				rc.saveSnap(rd.Snapshot)
 				// we do not set the snapshot stream here since
 				// this case arises in case of unstable snapshots
 				// in which case the given snapshot will have data
-				rc.saveSnap(rd.Snapshot)
+				//rc.saveSnap(rd.Snapshot, bytes.NewReader(rd.Snapshot.Data))
 				rc.raftStorage.ApplySnapshot(rd.Snapshot)
 				log.Printf("raft applied incoming snapshot at index %d", rd.Snapshot.Metadata.Index)
 				rc.publishSnapshot(rd.Snapshot)
