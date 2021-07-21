@@ -15,7 +15,6 @@
 package raft
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/binary"
