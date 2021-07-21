@@ -528,7 +528,7 @@ func (rc *raftNode) serveChannels() {
 				// in which case the given snapshot will have data
 				//rc.saveSnap(rd.Snapshot, bytes.NewReader(rd.Snapshot.Data))
 				rc.raftStorage.ApplySnapshot(rd.Snapshot)
-				log.Printf("raft applied incoming snapshot at index %d", rd.Snapshot.Metadata.Index)
+				log.Printf("nexus.raft: [Node %x] Applied incoming snapshot at index %d", rc.id, rd.Snapshot.Metadata.Index)
 				rc.publishSnapshot(rd.Snapshot)
 			}
 			rc.raftStorage.Append(rd.Entries)
@@ -581,7 +581,7 @@ func (r *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 			default:
 				// drop msgSnap if the inflight chan if full.
 			}
-			ms[i].To = 0
+			//ms[i].To = 0
 		}
 		//if ms[i].Type == raftpb.MsgHeartbeat {
 		//	ok, exceed := r.td.Observe(ms[i].To)
