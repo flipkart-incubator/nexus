@@ -1,15 +1,14 @@
 package raft
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
 	"github.com/flipkart-incubator/nexus/internal/models"
 	"github.com/golang/protobuf/proto"
-	"io/ioutil"
 	"log"
 	"net"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -220,7 +219,19 @@ func (this *replicator) restoreFromSnapshot() {
 		log.Panic(err)
 	}
 	log.Printf("[Node %x] Loading snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
-	reader := ioutil.NopCloser(bytes.NewBuffer(snapshot.Data))
+
+	//readId file from snapPayload
+	//indexId := binary.LittleEndian.Uint64(snapshot.Data)
+	dbFile, err := this.node.snapshotter.DBFilePath(snapshot.Metadata.Index)
+	if err != nil {
+		log.Fatalf("[Node %x] Failed to load db file for snapshot index %d", this.node.id, snapshot.Metadata.Index )
+	}
+
+	reader, err := os.Open(dbFile)
+	if err != nil {
+		log.Panic(err)
+	}
+
 	if err = this.store.Restore(reader); err != nil {
 		log.Panic(err)
 	}
@@ -277,6 +288,8 @@ func (this *replicator) sendSnapshots() error {
 	select {
 	// snapshot requested via send()
 	case m := <-this.node.msgSnapC:
+		log.Printf("nexus.raft: [Node %x] Request to send snapshot to  %d at Term %d, Index %d", this.node.id, m.To, m.Term, m.Index)
+
 		//load latest snapshot
 		currentSnap, err := this.node.snapshotter.Load()
 		if err != nil {
@@ -291,9 +304,18 @@ func (this *replicator) sendSnapshots() error {
 		}
 		m.Snapshot = snapshot
 
-		//TODO (kinshuk) : Get io.stream of sst file.
-		rc := ioutil.NopCloser(bytes.NewReader(currentSnap.Data))
-		mergedSnap := *snap.NewMessage(m, rc, int64(len(currentSnap.Data)))
+		//file data
+		//indexId := binary.LittleEndian.Uint64(currentSnap.Data)
+		dbFile, err := this.node.snapshotter.DBFilePath(currentSnap.Metadata.Index)
+		if err != nil {
+			return err
+		}
+		rc, err := os.Open(dbFile)
+		if err != nil {
+			return err
+		}
+		stat, _ := rc.Stat()
+		mergedSnap := *snap.NewMessage(m, rc, stat.Size())
 		fmt.Println("Sending mergedSnap snapshot")
 
 		//atomic.AddInt64(&s.inflightSnapshots, 1)

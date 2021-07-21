@@ -22,7 +22,6 @@ import (
 	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -444,30 +443,36 @@ func (rc *raftNode) maybeTriggerSnapshot(applyDoneC <-chan struct{}) {
 		}
 	}
 
-	log.Printf("nexus.raft: [Node %x] start snapshot [applied index: %d | last snapshot index: %d]", rc.id, rc.appliedIndex, rc.snapshotIndex)
-	data, err := rc.getSnapshot(db.SnapshotState{SnapshotIndex: rc.snapshotIndex, AppliedIndex: rc.appliedIndex})
+	appliedIndex := rc.appliedIndex
+	log.Printf("nexus.raft: [Node %x] start snapshot [applied index: %d | last snapshot index: %d]", rc.id, appliedIndex, rc.snapshotIndex)
+	data, err := rc.getSnapshot(db.SnapshotState{SnapshotIndex: rc.snapshotIndex, AppliedIndex: appliedIndex})
 	if err != nil {
 		log.Panic(err)
 	}
-	defer data.Close()
-	b, _ := ioutil.ReadAll(data)
-	snapshot, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, b)
+
+	//bs := make([]byte, 8)
+	//binary.LittleEndian.PutUint64(bs, appliedIndex)
+	snapshot, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, nil)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
-	if err = rc.saveSnap(snapshot); err != nil {
-		panic(err)
+	if _, err = rc.snapshotter.SaveDBFrom(data, appliedIndex); err != nil {
+		log.Fatal(err)
 	}
 
-	if rc.appliedIndex > rc.snapshotCatchUpEntries {
-		compactIndex := rc.appliedIndex - rc.snapshotCatchUpEntries
+	if err = rc.saveSnap(snapshot); err != nil {
+		log.Fatal(err)
+	}
+
+	if appliedIndex > rc.snapshotCatchUpEntries {
+		compactIndex := appliedIndex - rc.snapshotCatchUpEntries
 		if err = rc.raftStorage.Compact(compactIndex); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		log.Printf("nexus.raft: [Node %x] compacted log at index %d", rc.id, compactIndex)
 	}
 
-	rc.snapshotIndex = rc.appliedIndex
+	rc.snapshotIndex = appliedIndex
 }
 
 func (rc *raftNode) publishReadStates(readStates []raft.ReadState) bool {
@@ -640,10 +645,15 @@ func newStoppableListener(addr string, stopc <-chan struct{}) (*stoppableListene
 
 func (rc *raftNode) purgeFile() {
 	log.Printf("nexus.raft: [Node %x] Starting purgeFile() \n", rc.id)
-	var serrc, werrc <-chan error
+	var serrc, werrc, derrc <-chan error
 	if rc.maxSnapFiles > 0 {
 		serrc = fileutil.PurgeFile(rc.snapdir, "snap", rc.maxSnapFiles, purgeFileInterval, rc.stopc)
 	}
+
+	if rc.maxSnapFiles > 0 {
+			derrc = fileutil.PurgeFile(rc.snapdir, "snap.db", rc.maxSnapFiles, purgeFileInterval, rc.stopc)
+	}
+
 	if rc.maxWALFiles > 0 {
 		werrc = fileutil.PurgeFile(rc.waldir, "wal", rc.maxWALFiles, purgeFileInterval, rc.stopc)
 	}
@@ -651,6 +661,8 @@ func (rc *raftNode) purgeFile() {
 	select {
 	case e := <-serrc:
 		log.Fatalf("nexus.raft: [Node %x] failed to purge snap file %s", rc.id, e.Error())
+	case e := <-derrc:
+		log.Fatalf("nexus.raft: [Node %x] failed to purge snap.db file %s", rc.id, e.Error())
 	case e := <-werrc:
 		log.Fatalf("nexus.raft: [Node %x] failed to purge wal file %s", rc.id, e.Error())
 	case <-rc.stopc:
