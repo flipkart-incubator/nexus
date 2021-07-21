@@ -19,7 +19,6 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
@@ -544,14 +543,14 @@ func (rc *raftNode) serveChannels() {
 			rc.raftStorage.Append(rd.Entries)
 
 			// finish processing incoming messages before we signal raftdone chan
-			msgs := rc.processMessages(rd.Messages)
+			processedMsgs := rc.processMessages(rd.Messages)
 			applyDoneC, ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries), rd.Snapshot)
 			if !ok {
 				rc.stop()
 				return
 			}
 			rc.maybeTriggerSnapshot(applyDoneC)
-			rc.transport.Send(msgs)
+			rc.transport.Send(processedMsgs)
 
 			rc.node.Advance()
 
@@ -569,9 +568,9 @@ func (rc *raftNode) serveChannels() {
 func (r *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 	//sentAppResp := false
 	for i := len(ms) - 1; i >= 0; i-- {
-		//if r.isIDRemoved(ms[i].To) {
-		//	ms[i].To = 0
-		//}
+		if r.IsIDRemoved(ms[i].To) {
+			ms[i].To = 0
+		}
 
 		//if ms[i].Type == raftpb.MsgAppResp {
 		//	if sentAppResp {
@@ -586,13 +585,12 @@ func (r *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 			// The msgSnap only contains the most recent snapshot of store without KV.
 			// So we need to redirect the msgSnap to etcd server main loop for merging in the
 			// current store snapshot and KV snapshot.
-			fmt.Println("Got raftpb.MsgSnap REQUEST")
 			select {
 			case r.msgSnapC <- ms[i]:
 			default:
 				// drop msgSnap if the inflight chan if full.
 			}
-			//ms[i].To = 0
+			ms[i].To = 0
 		}
 		//if ms[i].Type == raftpb.MsgHeartbeat {
 		//	ok, exceed := r.td.Observe(ms[i].To)
@@ -608,12 +606,12 @@ func (r *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 }
 
 func (rc *raftNode) serveRaft() {
-	url, err := url.Parse(rc.rpeers[rc.id])
+	_url, err := url.Parse(rc.rpeers[rc.id])
 	if err != nil {
 		log.Fatalf("nexus.raft: [Node %x] Failed parsing URL (%v)", rc.id, err)
 	}
 
-	ln, err := newStoppableListener(url.Host, rc.httpstopc)
+	ln, err := newStoppableListener(_url.Host, rc.httpstopc)
 	if err != nil {
 		log.Fatalf("nexus.raft: [Node %x] Failed to listen rafthttp (%v)", rc.id, err)
 	}
