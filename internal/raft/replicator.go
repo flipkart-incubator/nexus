@@ -210,7 +210,7 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 	}
 }
 
-func (this *replicator) restoreFromSnapshot()   {
+func (this *replicator) restoreFromSnapshot() {
 	snapshot, err := this.node.snapshotter.Load()
 	if err == snap.ErrNoSnapshot {
 		log.Printf("[Node %x] WARNING - Received no snapshot error", this.node.id)
@@ -235,8 +235,8 @@ func (this *replicator) readCommits() {
 			continue
 		}
 
-			for _, entry := range _commit.data {
-				if len(entry.Data) > 0 {
+		for _, entry := range _commit.data {
+			if len(entry.Data) > 0 {
 				switch entry.Type {
 				case raftpb.EntryNormal:
 					var replReq models.NexusInternalRequest
@@ -278,7 +278,7 @@ func (this *replicator) sendSnapshots() error {
 	// snapshot requested via send()
 	case m := <-this.node.msgSnapC:
 		//load latest snapshot
-		currentSnap,  err := this.node.snapshotter.Load()
+		currentSnap, err := this.node.snapshotter.Load()
 		if err != nil {
 			return err
 		}
@@ -287,7 +287,7 @@ func (this *replicator) sendSnapshots() error {
 		// KV readCloser snapshot.
 		snapshot := raftpb.Snapshot{
 			Metadata: currentSnap.Metadata,
-			Data: nil,
+			Data:     nil,
 		}
 		m.Snapshot = snapshot
 

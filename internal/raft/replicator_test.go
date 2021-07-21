@@ -76,7 +76,7 @@ func testSaveLoadReallyLargeData(t *testing.T) {
 
 	//Read
 	for i := 0; i < iterations; i++ {
-		req1 := &kvReq{fmt.Sprintf("Key:KL%d#%d", runId, i), fmt.Sprintf("Val:%d#%d$%s", runId, i,token)}
+		req1 := &kvReq{fmt.Sprintf("Key:KL%d#%d", runId, i), fmt.Sprintf("Val:%d#%d$%s", runId, i, token)}
 		actVal := writePeer.load(t, req1).(string)
 		if req1.Val != actVal {
 			t.Errorf("Value mismatch for peer: %d. Key: %s, Expected Value: %s, Actual Value: %s", writePeer.id, req1.Key, req1.Val, actVal)
@@ -256,7 +256,7 @@ func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
 		clus.assertMembers(t, members)
 
 		//raft index
-		testutil.AssertEqual(t, peer5.repl.node.appliedIndex , peer1.repl.node.appliedIndex, "Raft appliedIndex should match" )
+		testutil.AssertEqual(t, peer5.repl.node.appliedIndex, peer1.repl.node.appliedIndex, "Raft appliedIndex should match")
 		// match data
 		db5, db1 := peer5.db.content, peer1.db.content
 		if !reflect.DeepEqual(db5, db1) {
@@ -278,7 +278,6 @@ func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
 		peer5.stop()
 	}
 }
-
 
 func testForNodeRestart(t *testing.T) {
 	peer2 := clus.peers[1]

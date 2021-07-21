@@ -60,17 +60,16 @@ const (
 // raftDone before assuming the raft messages are stable.
 type apply struct {
 	data       []raftpb.Entry
-	snapshot raftpb.Snapshot
+	snapshot   raftpb.Snapshot
 	applyDoneC chan struct{}
 }
 
 // A key-value stream backed by raft
 type raftNode struct {
 	readStateC chan raft.ReadState // to send out readState
-	commitC    chan *apply  // entries committed to log (k,v)
+	commitC    chan *apply         // entries committed to log (k,v)
 	errorC     chan error          // errors from raft session
-	msgSnapC  chan raftpb.Message 	// a chan to send/receive snapshot
-
+	msgSnapC   chan raftpb.Message // a chan to send/receive snapshot
 
 	id          uint64 // client ID for raft session
 	cid         uint64 //clusterId
@@ -136,7 +135,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *
 		statsCli:               statsCli,
 		maxSnapFiles:           opts.MaxSnapFiles(),
 		maxWALFiles:            opts.MaxWALFiles(),
-		msgSnapC:   make(chan raftpb.Message, maxInFlightMsgSnap),
+		msgSnapC:               make(chan raftpb.Message, maxInFlightMsgSnap),
 
 		// rest of structure populated after WAL replay
 	}
@@ -196,7 +195,7 @@ func (rc *raftNode) getLeaderId() uint64 {
 
 // publishEntries writes committed log entries to commit channel and returns
 // whether all entries could be published.
-func (rc *raftNode) publishEntries(ents []raftpb.Entry, snap raftpb.Snapshot ) (<-chan struct{}, bool) {
+func (rc *raftNode) publishEntries(ents []raftpb.Entry, snap raftpb.Snapshot) (<-chan struct{}, bool) {
 	if len(ents) == 0 {
 		return nil, true
 	}
@@ -364,7 +363,6 @@ func (rc *raftNode) startRaft() {
 
 	oldwal := wal.Exist(rc.waldir)
 	rc.wal = rc.replayWAL()
-
 
 	var rpeers []raft.Peer
 	for id, peer := range rc.rpeers {
@@ -545,7 +543,6 @@ func (rc *raftNode) serveChannels() {
 			}
 			rc.raftStorage.Append(rd.Entries)
 
-
 			// finish processing incoming messages before we signal raftdone chan
 			msgs := rc.processMessages(rd.Messages)
 			applyDoneC, ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries), rd.Snapshot)
@@ -633,8 +630,8 @@ func (rc *raftNode) serveRaft() {
 func (rc *raftNode) Process(ctx context.Context, m raftpb.Message) error {
 	return rc.node.Step(ctx, m)
 }
-func (rc *raftNode) IsIDRemoved(id uint64) bool                           { return false }
-func (rc *raftNode) ReportUnreachable(id uint64)                          {
+func (rc *raftNode) IsIDRemoved(id uint64) bool { return false }
+func (rc *raftNode) ReportUnreachable(id uint64) {
 	rc.node.ReportUnreachable(id)
 }
 func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {
