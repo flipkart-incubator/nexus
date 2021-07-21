@@ -256,7 +256,7 @@ func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
 		clus.assertMembers(t, members)
 
 		//raft index
-		testutil.AssertEqual(t, peer5.repl.node.appliedIndex, peer1.repl.node.appliedIndex, "Raft appliedIndex should match")
+		testutil.AssertEqual(t, peer1.repl.node.appliedIndex, peer5.repl.node.appliedIndex, "Raft appliedIndex should match")
 		// match data
 		db5, db1 := peer5.db.content, peer1.db.content
 		if !reflect.DeepEqual(db5, db1) {
