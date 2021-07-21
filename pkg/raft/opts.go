@@ -131,11 +131,11 @@ func (this *options) Join() bool {
 }
 
 func (this *options) LogDir() string {
-	return fmt.Sprintf("%s/node_%d", this.logDir, this.NodeId())
+	return fmt.Sprintf("%s/node_%x", this.logDir, this.NodeId())
 }
 
 func (this *options) SnapDir() string {
-	return fmt.Sprintf("%s/node_%d", this.snapDir, this.NodeId())
+	return fmt.Sprintf("%s/node_%x", this.snapDir, this.NodeId())
 }
 
 func (this *options) ClusterUrls() map[uint64]string {
