@@ -6,7 +6,6 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"github.com/coreos/etcd/pkg/testutil"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
 	"io/ioutil"
@@ -250,13 +249,16 @@ func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
 		if err = peer1.repl.AddMember(context.Background(), peer5Url); err != nil {
 			t.Fatal(err)
 		}
-		sleep(10)
+		sleep(15)
 		members := strings.Split(clusterUrl, ",")
 		members = append(members, peer5Url)
 		clus.assertMembers(t, members)
 
 		//raft index
-		testutil.AssertEqual(t, peer1.repl.node.appliedIndex, peer5.repl.node.appliedIndex, "Raft appliedIndex should match")
+		if !reflect.DeepEqual(peer1.repl.node.appliedIndex, peer5.repl.node.appliedIndex) {
+			t.Fatalf("Raft appliedIndex should match. Expectd %d Got %d", peer1.repl.node.appliedIndex, peer5.repl.node.appliedIndex)
+		}
+
 		// match data
 		db5, db1 := peer5.db.content, peer1.db.content
 		if !reflect.DeepEqual(db5, db1) {
