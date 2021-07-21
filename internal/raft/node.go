@@ -137,6 +137,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *
 		maxSnapFiles:           opts.MaxSnapFiles(),
 		maxWALFiles:            opts.MaxWALFiles(),
 		msgSnapC:   make(chan raftpb.Message, maxInFlightMsgSnap),
+
 		// rest of structure populated after WAL replay
 	}
 
@@ -269,7 +270,7 @@ func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
 		}
 		return snapshot
 	}
-	return &raftpb.Snapshot{}
+	return nil
 }
 
 // openWAL returns a WAL ready for reading.
@@ -309,6 +310,7 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 		log.Fatalf("nexus.raft: [Node %x] failed to read WAL (%v)", rc.id, err)
 	}
 	rc.raftStorage = raft.NewMemoryStorage()
+
 	if snapshot != nil {
 		rc.raftStorage.ApplySnapshot(*snapshot)
 	}
@@ -358,12 +360,11 @@ func (rc *raftNode) startRaft() {
 		}
 	}
 	rc.snapshotter = snap.New(rc.snapdir)
+	//rc.snapshotterReady <- rc.snapshotter
 
 	oldwal := wal.Exist(rc.waldir)
 	rc.wal = rc.replayWAL()
 
-	// signal replay has finished
-	//rc.snapshotterReady <- rc.snapshotter
 
 	var rpeers []raft.Peer
 	for id, peer := range rc.rpeers {
@@ -588,13 +589,13 @@ func (r *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 			// The msgSnap only contains the most recent snapshot of store without KV.
 			// So we need to redirect the msgSnap to etcd server main loop for merging in the
 			// current store snapshot and KV snapshot.
-			fmt.Println("GOOooooooot raftpb.MsgSnap REQUEST")
+			fmt.Println("Got raftpb.MsgSnap REQUEST")
 			select {
 			case r.msgSnapC <- ms[i]:
 			default:
 				// drop msgSnap if the inflight chan if full.
 			}
-			ms[i].To = 0
+			//ms[i].To = 0
 		}
 		//if ms[i].Type == raftpb.MsgHeartbeat {
 		//	ok, exceed := r.td.Observe(ms[i].To)

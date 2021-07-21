@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"github.com/coreos/etcd/pkg/testutil"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
 	"io/ioutil"
@@ -242,23 +243,25 @@ func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
 	} else {
 		// start the peer
 		peer5.start()
-		sleep(3)
+		sleep(5)
 		peer1 := clus.peers[0]
 
 		// add peer to existing cluster
 		if err = peer1.repl.AddMember(context.Background(), peer5Url); err != nil {
 			t.Fatal(err)
 		}
-		sleep(3)
+		sleep(10)
 		members := strings.Split(clusterUrl, ",")
 		members = append(members, peer5Url)
 		clus.assertMembers(t, members)
 
-		// insert data
+		//raft index
+		testutil.AssertEqual(t, peer5.repl.node.appliedIndex , peer1.repl.node.appliedIndex, "Raft appliedIndex should match" )
+		// match data
 		db5, db1 := peer5.db.content, peer1.db.content
 		if !reflect.DeepEqual(db5, db1) {
 			//TODO: Expect db mismatch as the db snapshot will not match, as that as not been synced.
-			t.Errorf("DB Mismatch Happened. Not Expected !!!")
+			t.Fatal("DB Mismatch Happened. Not Expected !!!")
 		}
 
 		// assert membership across all nodes
