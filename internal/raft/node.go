@@ -348,7 +348,6 @@ func (rc *raftNode) startRaft() {
 		}
 	}
 	rc.snapshotter = snap.New(rc.snapdir)
-	//rc.snapshotterReady <- rc.snapshotter
 
 	oldwal := wal.Exist(rc.waldir)
 	rc.wal = rc.replayWAL()
@@ -369,10 +368,14 @@ func (rc *raftNode) startRaft() {
 		Applied:         rc.appliedIndex,
 	}
 
-	if oldwal || rc.join {
+	if oldwal {
 		rc.node = raft.RestartNode(c)
 	} else {
-		rc.node = raft.StartNode(c, rpeers)
+		startPeers := rpeers
+		if rc.join {
+			startPeers = nil
+		}
+		rc.node = raft.StartNode(c, startPeers)
 	}
 
 	rc.transport = &rafthttp.Transport{
@@ -498,7 +501,6 @@ func (rc *raftNode) serveChannels() {
 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
-	//islead := false
 
 	// event loop on raft state machine updates
 	for {
@@ -509,9 +511,6 @@ func (rc *raftNode) serveChannels() {
 
 		// store raft entries to wal, then publish over commit channel
 		case rd := <-rc.node.Ready():
-			//if rd.SoftState != nil {
-			//	islead = rd.RaftState == raft.StateLeader
-			//}
 			if ok := rc.publishReadStates(rd.ReadStates); !ok {
 				rc.stop()
 				return
@@ -572,9 +571,8 @@ func (r *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 		//}
 
 		if ms[i].Type == raftpb.MsgSnap {
-			// There are two separate data store: the store for v2, and the KV for v3.
-			// The msgSnap only contains the most recent snapshot of store without KV.
-			// So we need to redirect the msgSnap to etcd server main loop for merging in the
+			// The msgSnap only contains the most recent id of store without KV.
+			// So we need to redirect the msgSnap to dkv server main loop for merging in the
 			// current store snapshot and KV snapshot.
 			select {
 			case r.msgSnapC <- ms[i]:
