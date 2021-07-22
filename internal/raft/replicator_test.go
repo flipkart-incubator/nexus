@@ -56,11 +56,11 @@ func testListMembers(t *testing.T) {
 
 func testSaveLoadReallyLargeData(t *testing.T) {
 	var reqs []*kvReq
-	iterations := 125
+	iterations := 50
 	// Saving
 	writePeer := clus.peers[0]
 	runId := writePeer.id
-	token := make([]byte, 1024*1024) //1mb
+	token := make([]byte, 1024*1024*2) //1mb
 	rand.Read(token)
 
 	for i := 0; i < iterations; i++ {
@@ -249,7 +249,7 @@ func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
 		if err = peer1.repl.AddMember(context.Background(), peer5Url); err != nil {
 			t.Fatal(err)
 		}
-		sleep(15)
+		sleep(30)
 		members := strings.Split(clusterUrl, ",")
 		members = append(members, peer5Url)
 		clus.assertMembers(t, members)
@@ -400,8 +400,8 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 		raft.LeaseBasedReads(false),
 		raft.SnapshotCatchUpEntries(25),
 		raft.SnapshotCount(50),
-		raft.MaxWALFiles(2),
-		raft.MaxSnapFiles(2),
+		raft.MaxWALFiles(1),
+		raft.MaxSnapFiles(1),
 	)
 	if err != nil {
 		return nil, err
@@ -424,6 +424,10 @@ func newJoiningPeer(peerAddr string) (*peer, error) {
 		raft.ClusterUrl(clusterUrl),
 		raft.ReplicationTimeout(replTimeout),
 		raft.LeaseBasedReads(false),
+		raft.SnapshotCatchUpEntries(25),
+		raft.SnapshotCount(50),
+		raft.MaxWALFiles(1),
+		raft.MaxSnapFiles(1),
 	)
 	if err != nil {
 		return nil, err

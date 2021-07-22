@@ -294,18 +294,30 @@ func StatsDAddr(statsdAddr string) Option {
 }
 
 func (this *options) MaxSnapFiles() uint {
+	if this.maxSnapFiles == 0 {
+		return defaultMaxSNAP
+	}
 	return uint(this.maxSnapFiles)
 }
 
 func (this *options) MaxWALFiles() uint {
+	if this.maxWALFiles == 0 {
+		return defaultMaxWAL
+	}
 	return uint(this.maxWALFiles)
 }
 
 func (this *options) SnapshotCount() uint64 {
+	if this.snapshotCount == 0 {
+		return uint64(defaultSnapshotCount)
+	}
 	return uint64(this.snapshotCount)
 }
 
 func (this *options) SnapshotCatchUpEntries() uint64 {
+	if this.snapshotCatchUpEntries == 0 {
+		return uint64(defaultSnapshotCatchUpEntries)
+	}
 	return uint64(this.snapshotCatchUpEntries)
 }
 

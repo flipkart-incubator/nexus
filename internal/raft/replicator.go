@@ -320,7 +320,6 @@ func (this *replicator) sendSnapshots() error {
 			}
 			stat, _ := rc.Stat()
 			mergedSnap := *snap.NewMessage(m, rc, stat.Size())
-			fmt.Println("Sending mergedSnap snapshot")
 
 			log.Printf("nexus.raft: [Node %x] Sending snap(T%d)+db(%s) snapshot to  %x \n", this.node.id, snapshot.Metadata.Index ,path.Base(dbFile), m.To)
 
