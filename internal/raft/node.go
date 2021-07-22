@@ -417,6 +417,7 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 		return
 	}
 
+
 	log.Printf("nexus.raft: [Node %x] publishing snapshot at index %d", rc.id, rc.snapshotIndex)
 	defer log.Printf("nexus.raft: [Node %x] finished publishing snapshot at index %d", rc.id, rc.snapshotIndex)
 
@@ -621,12 +622,20 @@ func (rc *raftNode) serveRaft() {
 }
 
 func (rc *raftNode) Process(ctx context.Context, m raftpb.Message) error {
+	if m.Type == raftpb.MsgSnap {
+		if m.Snapshot.Metadata.Index > 0 {
+			rc.commitC <- nil // trigger kvstore to load snapshot
+			//TODO : how would newer entries from raft be merged?
+		}
+	}
 	return rc.node.Step(ctx, m)
 }
 func (rc *raftNode) IsIDRemoved(id uint64) bool { return false }
+
 func (rc *raftNode) ReportUnreachable(id uint64) {
 	rc.node.ReportUnreachable(id)
 }
+
 func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {
 	rc.node.ReportSnapshot(id, status)
 }
