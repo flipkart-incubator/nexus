@@ -258,24 +258,6 @@ func (r *replicator) applyAll() {
 
 		r.sendSnapshots()
 	}
-	//s.applySnapshot(ep, apply)
-	//s.applyEntries(ep, apply)
-	//
-	//proposalsApplied.Set(float64(ep.appliedi))
-	//s.applyWait.Trigger(ep.appliedi)
-	//// wait for the raft routine to finish the disk writes before triggering a
-	//// snapshot. or applied index might be greater than the last index in raft
-	//// storage, since the raft routine might be slower than apply routine.
-	//<-apply.notifyc
-	//
-	//s.triggerSnapshot(ep)
-	//select {
-	//// snapshot requested via send()
-	//case m := <-s.r.msgSnapC:
-	//	merged := s.createMergedSnapshotMessage(m, ep.appliedt, ep.appliedi, ep.confState)
-	//	s.sendMergedSnap(merged)
-	//default:
-	//}
 }
 
 func (rc *replicator) applyEntries(apply *apply)  {
@@ -438,7 +420,7 @@ func (this *replicator) sendSnapshots() error {
 	select {
 	// snapshot requested via send()
 	case m := <-this.node.msgSnapC:
-		log.Printf("nexus.raft: [Node %x] Request to send snapshot to  %d at Term %d, Index %d \n", this.node.id, m.To, m.Term, m.Index)
+		log.Printf("nexus.raft: [Node %x] Request to send snapshot to %x at Term %d, Index %d \n", this.node.id, m.To, m.Term, m.Index)
 
 		//load latest snapshot
 		currentSnap, err := this.node.snapshotter.Load()

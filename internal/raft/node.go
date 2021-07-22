@@ -553,7 +553,7 @@ func (r *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 			default:
 				// drop msgSnap if the inflight chan if full.
 			}
-			//ms[i].To = 0
+			ms[i].To = 0
 		}
 		//if ms[i].Type == raftpb.MsgHeartbeat {
 		//	ok, exceed := r.td.Observe(ms[i].To)
@@ -596,12 +596,6 @@ func (rc *raftNode) Process(ctx context.Context, m raftpb.Message) error {
 		return httptypes.NewHTTPError(http.StatusForbidden, "cannot process message from removed member")
 	}
 
-	if m.Type == raftpb.MsgSnap {
-		if m.Snapshot.Metadata.Index > 0 {
-			//rc.commitC <- nil // trigger kvstore to load snapshot
-			//TODO : how would newer entries from raft be merged?
-		}
-	}
 	return rc.node.Step(ctx, m)
 }
 func (rc *raftNode) IsIDRemoved(id uint64) bool { return false }
