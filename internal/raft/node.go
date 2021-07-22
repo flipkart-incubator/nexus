@@ -482,6 +482,31 @@ func (rc *raftNode) serveChannels() {
 			// now unblocks 'applyAll' that waits on Raft log disk writes before triggering snapshots
 			notifyc <- struct{}{}
 
+			// Candidate or follower needs to wait for all pending configuration
+			// changes to be applied before sending messages.
+			// Otherwise we might incorrectly count votes (e.g. votes from removed members).
+			// Also slow machine's follower raft-layer could proceed to become the leader
+			// on its own single-node cluster, before apply-layer applies the config change.
+			// We simply wait for ALL pending entries to be applied for now.
+			// We might improve this later on if it causes unnecessary long blocking issues.
+			waitApply := false
+			for _, ent := range rd.CommittedEntries {
+				if ent.Type == raftpb.EntryConfChange {
+					waitApply = true
+					break
+				}
+			}
+			if waitApply {
+				// blocks until 'applyAll' calls 'applyWait.Trigger'
+				// to be in sync with scheduled config-change job
+				// (assume notifyc has cap of 1)
+				select {
+				case notifyc <- struct{}{}:
+				case <-rc.stopc:
+					return
+				}
+			}
+
 			//applyDoneC, ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries))
 			//if !ok {
 			//	rc.stop()
