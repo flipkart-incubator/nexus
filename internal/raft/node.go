@@ -19,6 +19,7 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
+	"github.com/coreos/etcd/etcdserver/api/v2http/httptypes"
 	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
@@ -57,15 +58,15 @@ const (
 // to raft storage concurrently; the application must read
 // raftDone before assuming the raft messages are stable.
 type apply struct {
-	data       []raftpb.Entry
-	snapshot   raftpb.Snapshot
-	applyDoneC chan struct{}
+	data     []raftpb.Entry
+	snapshot raftpb.Snapshot
+	notifyc  chan struct{}
 }
 
 // A key-value stream backed by raft
 type raftNode struct {
 	readStateC chan raft.ReadState // to send out readState
-	commitC    chan *apply         // entries committed to log (k,v)
+	applyc     chan *apply         // entries committed to store (k,v)
 	errorC     chan error          // errors from raft session
 	msgSnapC   chan raftpb.Message // a chan to send/receive snapshot
 
@@ -110,13 +111,13 @@ type raftNode struct {
 func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *raftNode {
 
 	readStateC := make(chan raft.ReadState)
-	commitC := make(chan *apply)
+	applyc := make(chan *apply)
 	errorC := make(chan error)
 	nodeId := opts.NodeId()
 
 	rc := &raftNode{
 		readStateC:             readStateC,
-		commitC:                commitC,
+		applyc: applyc,
 		errorC:                 errorC,
 		id:                     nodeId,
 		rpeers:                 opts.ClusterUrls(),
@@ -173,71 +174,12 @@ func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
 	return rc.wal.ReleaseLockTo(snap.Metadata.Index)
 }
 
-func (rc *raftNode) entriesToApply(ents []raftpb.Entry) (nents []raftpb.Entry) {
-	if len(ents) == 0 {
-		return ents
-	}
-	firstIdx := ents[0].Index
-	if firstIdx > rc.appliedIndex+1 {
-		log.Fatalf("[Node %x] first index of committed entry[%d] should <= progress.appliedIndex[%d]+1", rc.id, firstIdx, rc.appliedIndex)
-	}
-	if rc.appliedIndex-firstIdx+1 < uint64(len(ents)) {
-		nents = ents[rc.appliedIndex-firstIdx+1:]
-	}
-	return nents
-}
+
 
 func (rc *raftNode) getLeaderId() uint64 {
 	return rc.node.Status().SoftState.Lead
 }
 
-// publishEntries writes committed log entries to commit channel and returns
-// whether all entries could be published.
-func (rc *raftNode) publishEntries(ents []raftpb.Entry, snap raftpb.Snapshot) (<-chan struct{}, bool) {
-	if len(ents) == 0 {
-		return nil, true
-	}
-
-	for i := range ents {
-		switch ents[i].Type {
-		case raftpb.EntryNormal: // nothing to do but leaving for clarity
-		case raftpb.EntryConfChange:
-			var cc raftpb.ConfChange
-			cc.Unmarshal(ents[i].Data)
-			rc.confState = *rc.node.ApplyConfChange(cc)
-			switch cc.Type {
-			case raftpb.ConfChangeAddNode:
-				if len(cc.Context) > 0 {
-					rc.transport.AddPeer(types.ID(cc.NodeID), []string{string(cc.Context)})
-					rc.rpeers[cc.NodeID] = string(cc.Context)
-				}
-			case raftpb.ConfChangeRemoveNode:
-				if cc.NodeID == rc.id {
-					log.Printf("[Node %x] I've been removed from the cluster! Shutting down.", rc.id)
-					// TODO: In this case, check if its OK to not publish to rc.commitC
-					return nil, false
-				}
-				if _, ok := rc.rpeers[cc.NodeID]; !ok {
-					log.Printf("[Node %x] WARNING Ignoring request to remove non-existing Node with ID: %v from the cluster.", rc.id, cc.NodeID)
-				} else {
-					rc.transport.RemovePeer(types.ID(cc.NodeID))
-					delete(rc.rpeers, cc.NodeID)
-				}
-			}
-		}
-	}
-
-	applyDoneC := make(chan struct{}, 1)
-	select {
-	case rc.commitC <- &apply{data: ents, applyDoneC: applyDoneC, snapshot: snap}:
-	case <-rc.stopc:
-		return nil, false
-	}
-
-	// after commit, update appliedIndex
-	rc.appliedIndex = ents[len(ents)-1].Index
-	return applyDoneC, true
-}
 
 func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
 	if wal.Exist(rc.waldir) {
@@ -305,18 +247,12 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 
 	// append to storage so raft starts at the right place in log
 	rc.raftStorage.Append(ents)
-	// send nil once lastIndex is published so client knows commit channel is current
-	//if len(ents) > 0 {
-	//	rc.lastIndex = ents[len(ents)-1].Index
-	//} else {
-	//	rc.commitC <- nil
-	//}
 	return w
 }
 
 func (rc *raftNode) writeError(err error) {
 	rc.stopHTTP()
-	close(rc.commitC)
+	close(rc.applyc)
 	rc.errorC <- err
 	close(rc.errorC)
 	rc.node.Stop()
@@ -401,7 +337,7 @@ func (rc *raftNode) startRaft() {
 // stop closes http, closes all channels, and stops raft.
 func (rc *raftNode) stop() {
 	rc.stopHTTP()
-	close(rc.commitC)
+	close(rc.applyc)
 	close(rc.errorC)
 	rc.node.Stop()
 }
@@ -412,38 +348,20 @@ func (rc *raftNode) stopHTTP() {
 	<-rc.httpdonec
 }
 
-func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
-	if raft.IsEmptySnap(snapshotToSave) {
-		return
-	}
 
-
-	log.Printf("nexus.raft: [Node %x] publishing snapshot at index %d", rc.id, rc.snapshotIndex)
-	defer log.Printf("nexus.raft: [Node %x] finished publishing snapshot at index %d", rc.id, rc.snapshotIndex)
-
-	if snapshotToSave.Metadata.Index <= rc.appliedIndex {
-		log.Fatalf("nexus.raft: [Node %x] snapshot index [%d] should > progress.appliedIndex [%d]", rc.id, snapshotToSave.Metadata.Index, rc.appliedIndex)
-	}
-	rc.commitC <- nil // trigger kvstore to load snapshot
-
-	rc.confState = snapshotToSave.Metadata.ConfState
-	rc.snapshotIndex = snapshotToSave.Metadata.Index
-	rc.appliedIndex = snapshotToSave.Metadata.Index
-}
-
-func (rc *raftNode) maybeTriggerSnapshot(applyDoneC <-chan struct{}) {
+func (rc *raftNode) maybeTriggerSnapshot(/*applyDoneC <-chan struct{}*/) {
 	if rc.appliedIndex-rc.snapshotIndex <= rc.snapCount {
 		return
 	}
 
 	//// wait until all committed entries are applied (or server is closed)
-	if applyDoneC != nil {
-		select {
-		case <-applyDoneC:
-		case <-rc.stopc:
-			return
-		}
-	}
+	//if applyDoneC != nil {
+	//	select {
+	//	case <-applyDoneC:
+	//	case <-rc.stopc:
+	//		return
+	//	}
+	//}
 
 	appliedIndex := rc.appliedIndex
 	log.Printf("nexus.raft: [Node %x] start snapshot [applied index: %d | last snapshot index: %d]", rc.id, appliedIndex, rc.snapshotIndex)
@@ -523,30 +441,53 @@ func (rc *raftNode) serveChannels() {
 				return
 			}
 
+			notifyc := make(chan struct{}, 1)
+			ap := apply{
+				data:     rd.CommittedEntries,
+				snapshot: rd.Snapshot,
+				notifyc:  notifyc,
+			}
+
+			select {
+			case rc.applyc <- &ap:
+			case <-rc.stopc:
+				return
+			}
+
 			if err = rc.wal.Save(rd.HardState, rd.Entries); err != nil {
 				log.Fatalf("raft save state and entries error: %v", err)
 			}
 
 			if !raft.IsEmptySnap(rd.Snapshot) {
-				rc.saveSnap(rd.Snapshot)
+				if err = rc.saveSnap(rd.Snapshot); err != nil {
+					log.Fatalf("raft save snapshot error: %v", err)
+				}
+
+				// dkv now claim the snapshot has been persisted onto the disk
+				notifyc <- struct{}{}
+
 				// we do not set the snapshot stream here since
 				// this case arises in case of unstable snapshots
 				// in which case the given snapshot will have data
 				//rc.saveSnap(rd.Snapshot, bytes.NewReader(rd.Snapshot.Data))
 				rc.raftStorage.ApplySnapshot(rd.Snapshot)
 				log.Printf("nexus.raft: [Node %x] Applied incoming snapshot at index %d", rc.id, rd.Snapshot.Metadata.Index)
-				rc.publishSnapshot(rd.Snapshot)
+				//rc.applySnapshot(rd.Snapshot)
 			}
+
 			rc.raftStorage.Append(rd.Entries)
 
 			// finish processing incoming messages before we signal raftdone chan
 			processedMsgs := rc.processMessages(rd.Messages)
-			applyDoneC, ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries), rd.Snapshot)
-			if !ok {
-				rc.stop()
-				return
-			}
-			rc.maybeTriggerSnapshot(applyDoneC)
+			// now unblocks 'applyAll' that waits on Raft log disk writes before triggering snapshots
+			notifyc <- struct{}{}
+
+			//applyDoneC, ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries))
+			//if !ok {
+			//	rc.stop()
+			//	return
+			//}
+			rc.maybeTriggerSnapshot()
 			rc.transport.Send(processedMsgs)
 
 			rc.node.Advance()
@@ -568,6 +509,7 @@ func (r *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 		if r.IsIDRemoved(ms[i].To) {
 			ms[i].To = 0
 		}
+
 
 		//if ms[i].Type == raftpb.MsgAppResp {
 		//	if sentAppResp {
@@ -597,6 +539,9 @@ func (r *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 		//		heartbeatSendFailures.Inc()
 		//	}
 		//}
+
+
+
 	}
 	return ms
 }
@@ -622,9 +567,13 @@ func (rc *raftNode) serveRaft() {
 }
 
 func (rc *raftNode) Process(ctx context.Context, m raftpb.Message) error {
+	if rc.IsIDRemoved(m.From) {
+		return httptypes.NewHTTPError(http.StatusForbidden, "cannot process message from removed member")
+	}
+
 	if m.Type == raftpb.MsgSnap {
 		if m.Snapshot.Metadata.Index > 0 {
-			rc.commitC <- nil // trigger kvstore to load snapshot
+			//rc.commitC <- nil // trigger kvstore to load snapshot
 			//TODO : how would newer entries from raft be merged?
 		}
 	}
