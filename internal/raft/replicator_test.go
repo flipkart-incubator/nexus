@@ -261,8 +261,15 @@ func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
 
 		// match data
 		db5, db1 := peer5.db.content, peer1.db.content
+
+		//lets match the num keys count.
+		if len(db5) != len(db1) {
+			//find difference of keys
+			keyDiff := difference(db1, db5)
+			t.Fatalf("DB Mismatch Happened. Missing keys (%d) %+v !!!", len(keyDiff), keyDiff)
+		}
+
 		if !reflect.DeepEqual(db5, db1) {
-			//TODO: Expect db mismatch as the db snapshot will not match, as that as not been synced.
 			t.Fatal("DB Mismatch Happened. Not Expected !!!")
 		}
 
@@ -279,6 +286,21 @@ func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
 		clus.assertMembers(t, members[0:len(members)-1])
 		peer5.stop()
 	}
+}
+
+// difference returns the elements in `a` that aren't in `b`.
+func difference(a, b map[string]interface{}) []string {
+	mb := make(map[string]struct{}, len(b))
+	for x, _ := range b {
+		mb[x] = struct{}{}
+	}
+	var diff []string
+	for x, _ := range a {
+		if _, found := mb[x]; !found {
+			diff = append(diff, x)
+		}
+	}
+	return diff
 }
 
 func testForNodeRestart(t *testing.T) {
