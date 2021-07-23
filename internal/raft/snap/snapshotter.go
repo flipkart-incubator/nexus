@@ -10,6 +10,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -47,6 +48,40 @@ func (s *Snapshotter) SaveSnapshot(snapshot raftpb.Snapshot, stream io.Reader) e
 		return nil
 	}
 	return s.saveSnapshot(&snapshot, stream)
+}
+
+func (s *Snapshotter) SaveDBFrom(r io.Reader, id uint64) (int64, error) {
+	f, err := ioutil.TempFile(s.dir, "tmp")
+	if err != nil {
+		return 0, err
+	}
+	var n int64
+	n, err = io.Copy(f, r)
+	if err == nil {
+		err = fileutil.Fsync(f)
+	}
+	f.Close()
+	if err != nil {
+		os.Remove(f.Name())
+		return n, err
+	}
+	fn := s.dbFilePath(id)
+	if fileutil.Exist(fn) {
+		os.Remove(f.Name())
+		return n, nil
+	}
+	err = os.Rename(f.Name(), fn)
+	if err != nil {
+		os.Remove(f.Name())
+		return n, err
+	}
+
+	log.Printf("INFO - saved database snapshot to disk [total bytes: %d]", n)
+	return n, nil
+}
+
+func (s *Snapshotter) dbFilePath(id uint64) string {
+	return filepath.Join(s.dir, fmt.Sprintf("%016x.snap.db", id))
 }
 
 func (s *Snapshotter) saveSnapshot(snapshot *raftpb.Snapshot, stream io.Reader) error {

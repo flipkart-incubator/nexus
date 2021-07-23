@@ -32,6 +32,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/flipkart-incubator/nexus/internal/raft/rafthttp"
 	"github.com/flipkart-incubator/nexus/internal/raft/snap"
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
@@ -41,7 +42,6 @@ import (
 	"github.com/coreos/etcd/pkg/types"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/coreos/etcd/rafthttp"
 	"github.com/coreos/etcd/wal"
 	"github.com/coreos/etcd/wal/walpb"
 )
@@ -484,6 +484,9 @@ func (rc *raftNode) serveChannels() {
 				rc.saveSnap(rd.Snapshot, bytes.NewReader(rd.Snapshot.Data))
 				rc.raftStorage.ApplySnapshot(rd.Snapshot)
 				rc.publishSnapshot(rd.Snapshot)
+				rc.transport.SendSnapshot(snap.Message{
+
+				})
 			}
 			rc.raftStorage.Append(rd.Entries)
 			rc.transport.Send(rd.Messages)
