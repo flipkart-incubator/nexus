@@ -18,18 +18,14 @@ import (
 )
 
 const (
-	snapSuffix = ".snap"
+	snapSuffix   = ".snap"
+	snapDBSuffix = ".db"
 )
 
 var (
 	ErrNoSnapshot      = errors.New("snap: no available snapshot")
 	ErrEmptySnapshot   = errors.New("snap: empty snapshot")
 	ErrInvalidSnapshot = errors.New("snap: invalid snapshot")
-
-	// A map of valid files that can be present in the snap folder.
-	validFiles = map[string]bool{
-		"db": true,
-	}
 )
 
 type Snapshotter struct {
@@ -138,13 +134,49 @@ func (s *Snapshotter) LoadSnapshotBody(snapshot raftpb.Snapshot) (int64, io.Read
 	return int64(snapLen), snapFile, nil
 }
 
-func loadSnap(dir, name string) (*raftpb.Snapshot, io.ReadCloser, error) {
+func loadSnap(dir, name string) (snap *raftpb.Snapshot, data io.ReadCloser, err error) {
 	fpath := filepath.Join(dir, name)
-	snap, data, err := readSnap(fpath)
+	if strings.HasSuffix(fpath, snapDBSuffix) {
+		snap, data, err = readSnapDB(fpath)
+	} else {
+		snap, data, err = readSnap(fpath)
+	}
 	if err != nil {
 		renameBroken(fpath)
 	}
-	return snap, data, err
+	return
+}
+
+func readSnapDB(snapName string) (*raftpb.Snapshot, io.ReadCloser, error) {
+	snapFile, err := os.Open(snapName)
+	if err != nil {
+		log.Printf("ERROR - cannot read snapshot DB file %v: %v", snapName, err)
+		return nil, nil, err
+	}
+
+	snapLenBts := make([]byte, 8)
+	numRead, err := snapFile.Read(snapLenBts)
+	if numRead != len(snapLenBts) || err != nil {
+		log.Printf("ERROR - unable to read snapshot DB file %v: %v", snapName, err)
+		return nil, nil, ErrEmptySnapshot
+	}
+
+	snapLen := binary.BigEndian.Uint64(snapLenBts)
+	snapBts := make([]byte, snapLen)
+	numRead, err = snapFile.Read(snapBts)
+	if err != nil {
+		log.Printf("ERROR - unable to read snapshot data from DB file %v: %v", snapName, err)
+		return nil, nil, err
+	}
+	if numRead != len(snapBts) {
+		log.Printf("ERROR - unable to read snapshot data from DB file %v. Expected snapshot length: %d, actual: %d",
+			snapName, snapLen, numRead)
+		return nil, nil, ErrInvalidSnapshot
+	}
+
+	msg := new(raftpb.Message)
+	pbutil.MustUnmarshal(msg, snapBts)
+	return &msg.Snapshot, snapFile, nil
 }
 
 func readSnap(snapName string) (*raftpb.Snapshot, io.ReadCloser, error) {
@@ -205,14 +237,10 @@ func (s *Snapshotter) snapNames() ([]string, error) {
 func checkSuffix(names []string) []string {
 	var snaps []string
 	for i := range names {
-		if strings.HasSuffix(names[i], snapSuffix) {
+		if strings.HasSuffix(names[i], snapSuffix) || strings.HasSuffix(names[i], snapDBSuffix) {
 			snaps = append(snaps, names[i])
 		} else {
-			// If we find a file which is not a snapshot then check if it's
-			// a valid file. If not throw out a warning.
-			if _, ok := validFiles[names[i]]; !ok {
-				log.Printf("WARNING - skipped unexpected non snapshot file %v", names[i])
-			}
+			log.Printf("WARNING - skipped unexpected non snapshot file %v", names[i])
 		}
 	}
 	return snaps

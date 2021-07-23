@@ -23,7 +23,6 @@ import (
 	internal_snap "github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -231,8 +230,6 @@ func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
 	}
 	if snapshot != nil && data != nil {
 		defer data.Close()
-		// FIXME(kalyan) - Prevent this !!!
-		snapshot.Data, _ = ioutil.ReadAll(data)
 	}
 	return snapshot
 }

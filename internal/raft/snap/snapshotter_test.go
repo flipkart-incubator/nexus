@@ -16,7 +16,12 @@ package snap
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
+	pioutil "github.com/coreos/etcd/pkg/ioutil"
+	"github.com/coreos/etcd/pkg/pbutil"
+	internal_snap "github.com/coreos/etcd/snap"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -58,6 +63,44 @@ func TestSaveAndLoad(t *testing.T) {
 	g.Data, _ = ioutil.ReadAll(data)
 	if !reflect.DeepEqual(g, testSnap) {
 		t.Errorf("snap = %#v, want %#v", g, testSnap)
+	}
+}
+
+func TestSaveAndLoadSnapDB(t *testing.T) {
+	dir := filepath.Join(os.TempDir(), "snapshot-db")
+	err := os.Mkdir(dir, 0700)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	ssi := internal_snap.New(dir)
+	ss := New(dir)
+
+	msg := new(internal_snap.Message)
+	msg.Message = raftpb.Message{
+		Type:     raftpb.MsgSnap,
+		To:       1234,
+		Snapshot: *testSnap,
+	}
+	msg.ReadCloser = ioutil.NopCloser(bytes.NewReader(testSnap.Data))
+	msg.TotalSize = int64(len(testSnap.Data))
+	body := createSnapBody(t, msg)
+	_, err = ssi.SaveDBFrom(body, testSnap.Metadata.Index)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	g, data, err := ss.LoadSnapshot()
+	if err != nil {
+		t.Errorf("err = %v, want nil", err)
+	}
+	defer data.Close()
+	snapData, _ := ioutil.ReadAll(data)
+	if !reflect.DeepEqual(g, testSnap) {
+		t.Errorf("snap = %#v, want %#v", g, testSnap)
+	}
+	if !bytes.Equal(snapData, testSnap.Data) {
+		t.Errorf("snap = %#v, want %#v", snapData, testSnap.Data)
 	}
 }
 
@@ -209,5 +252,22 @@ func TestAllSnapshotBroken(t *testing.T) {
 	_, _, err = ss.LoadSnapshot()
 	if err != ErrNoSnapshot {
 		t.Errorf("err = %v, want %v", err, ErrNoSnapshot)
+	}
+}
+
+func createSnapBody(t *testing.T, merged *internal_snap.Message) io.ReadCloser {
+	buf := new(bytes.Buffer)
+	if err := binary.Write(buf, binary.BigEndian, uint64(merged.Message.Size())); err != nil {
+		t.Fatalf("unable to encode. Error %v", err)
+		return nil
+	}
+	if _, err := buf.Write(pbutil.MustMarshal(&merged.Message)); err != nil {
+		t.Fatalf("unable to encode. Error %v", err)
+		return nil
+	}
+
+	return &pioutil.ReaderAndCloser{
+		Reader: io.MultiReader(buf, merged.ReadCloser),
+		Closer: merged.ReadCloser,
 	}
 }
