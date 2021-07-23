@@ -20,6 +20,7 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
+	internal_snap "github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
 	"io/ioutil"
@@ -486,7 +487,7 @@ func (rc *raftNode) serveChannels() {
 				rc.publishSnapshot(rd.Snapshot)
 			}
 			rc.raftStorage.Append(rd.Entries)
-			rc.transport.Send(rd.Messages)
+			rc.sendToTransport(rd.Messages)
 			if ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries)); !ok {
 				rc.stop()
 				return
@@ -503,6 +504,33 @@ func (rc *raftNode) serveChannels() {
 			return
 		}
 	}
+}
+
+// sendToTransport sends the given messages to transport
+// which handles the transmission of the contents to the
+// peers. We split the given messages into snapshot and
+// normal messages. Snapshot messages are then sent using
+// a different transport API that avoids reading in the
+// entire snapshot body into memory prior transmission.
+func (rc *raftNode) sendToTransport(msgs []raftpb.Message) {
+	var nonSnapMsgs []raftpb.Message
+	for _, msg := range msgs {
+		if msg.Type == raftpb.MsgSnap {
+			snapLen, snapReader, err := rc.snapshotter.LoadSnapshotBody(msg.Snapshot)
+			if err != nil {
+				log.Fatalf("nexus.raft: Error while loading snapshot - %v", err)
+			}
+			snapMsg := internal_snap.Message{
+				Message:    msg,
+				ReadCloser: snapReader,
+				TotalSize:  snapLen,
+			}
+			rc.transport.SendSnapshot(snapMsg)
+		} else {
+			nonSnapMsgs = append(nonSnapMsgs, msg)
+		}
+	}
+	rc.transport.Send(nonSnapMsgs)
 }
 
 func (rc *raftNode) serveRaft() {

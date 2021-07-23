@@ -22,8 +22,8 @@ const (
 )
 
 var (
-	ErrNoSnapshot    = errors.New("snap: no available snapshot")
-	ErrEmptySnapshot = errors.New("snap: empty snapshot")
+	ErrNoSnapshot      = errors.New("snap: no available snapshot")
+	ErrEmptySnapshot   = errors.New("snap: empty snapshot")
 	ErrInvalidSnapshot = errors.New("snap: invalid snapshot")
 
 	// A map of valid files that can be present in the snap folder.
@@ -50,8 +50,7 @@ func (s *Snapshotter) SaveSnapshot(snapshot raftpb.Snapshot, stream io.Reader) e
 }
 
 func (s *Snapshotter) saveSnapshot(snapshot *raftpb.Snapshot, stream io.Reader) error {
-	fname := fmt.Sprintf("%016x-%016x%s", snapshot.Metadata.Term, snapshot.Metadata.Index, snapSuffix)
-	snapFile := filepath.Join(s.dir, fname)
+	snapFile := s.snapFileName(snapshot)
 	err := s.writeSnap(snapFile, snapshot, stream, 0666)
 	if err != nil {
 		err1 := os.Remove(snapFile)
@@ -60,6 +59,12 @@ func (s *Snapshotter) saveSnapshot(snapshot *raftpb.Snapshot, stream io.Reader) 
 		}
 	}
 	return err
+}
+
+func (s *Snapshotter) snapFileName(snapshot *raftpb.Snapshot) string {
+	fname := fmt.Sprintf("%016x-%016x%s", snapshot.Metadata.Term, snapshot.Metadata.Index, snapSuffix)
+	snapFile := filepath.Join(s.dir, fname)
+	return snapFile
 }
 
 func (s *Snapshotter) writeSnap(snapFile string, snapshot *raftpb.Snapshot, data io.Reader, perm os.FileMode) error {
@@ -112,6 +117,25 @@ func (s *Snapshotter) LoadSnapshot() (*raftpb.Snapshot, io.ReadCloser, error) {
 		return nil, nil, ErrNoSnapshot
 	}
 	return snap, data, nil
+}
+
+func (s *Snapshotter) LoadSnapshotBody(snapshot raftpb.Snapshot) (int64, io.ReadCloser, error) {
+	snapFileName := s.snapFileName(&snapshot)
+	snapFile, err := os.Open(snapFileName)
+	if err != nil {
+		log.Printf("ERROR - cannot access snapshot file %v: %v", snapFileName, err)
+		return -1, nil, err
+	}
+
+	snapLenBts := make([]byte, 4)
+	numRead, err := snapFile.Read(snapLenBts)
+	if numRead != len(snapLenBts) || err != nil {
+		log.Printf("ERROR - unable to read snapshot file %v: %v", snapFileName, err)
+		return -1, nil, ErrEmptySnapshot
+	}
+
+	snapLen := binary.LittleEndian.Uint32(snapLenBts)
+	return int64(snapLen), snapFile, nil
 }
 
 func loadSnap(dir, name string) (*raftpb.Snapshot, io.ReadCloser, error) {
