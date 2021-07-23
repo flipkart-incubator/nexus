@@ -360,6 +360,7 @@ func (rc *raftNode) startRaft() {
 		ServerStats: etcd_stats.NewServerStats("", ""),
 		LeaderStats: etcd_stats.NewLeaderStats(strconv.Itoa(int(rc.id))),
 		ErrorC:      make(chan error),
+		Snapshotter: internal_snap.New(rc.snapdir),
 	}
 
 	rc.transport.Start()
