@@ -523,11 +523,7 @@ func (rc *raftNode) sendToTransport(msgs []raftpb.Message) {
 			// number of bytes to be known upfront.
 			snapMsg.ReadCloser = snapReader
 			rc.transport.SendSnapshot(*snapMsg)
-			if sent := <- snapMsg.CloseNotify(); sent {
-				log.Printf("nexus.raft: [Node %x] Successfully sent snapshot stream", rc.id)
-			} else {
-				log.Fatalf("nexus.raft: [Node %x] Unable to send snapshot to peer %x. Error - %v", rc.id, msg.To, err)
-			}
+			<- snapMsg.CloseNotify()
 		} else {
 			nonSnapMsgs = append(nonSnapMsgs, msg)
 		}
