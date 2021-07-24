@@ -64,43 +64,15 @@ func TestSaveAndLoad(t *testing.T) {
 	if !reflect.DeepEqual(g, testSnap) {
 		t.Errorf("snap = %#v, want %#v", g, testSnap)
 	}
-}
 
-func TestSaveAndLoadSnapDB(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), "snapshot-db")
-	err := os.Mkdir(dir, 0700)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-	ssi := internal_snap.New(dir)
-	ss := New(dir)
-
-	msg := new(internal_snap.Message)
-	msg.Message = raftpb.Message{
-		Type:     raftpb.MsgSnap,
-		To:       1234,
-		Snapshot: *testSnap,
-	}
-	msg.ReadCloser = ioutil.NopCloser(bytes.NewReader(testSnap.Data))
-	msg.TotalSize = int64(len(testSnap.Data))
-	body := createSnapBody(t, msg)
-	_, err = ssi.SaveDBFrom(body, testSnap.Metadata.Index)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	g, data, err := ss.LoadSnapshot()
+	body, err := ss.LoadSnapshotBody(*testSnap)
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
 	}
-	defer data.Close()
-	snapData, _ := ioutil.ReadAll(data)
-	if !reflect.DeepEqual(g, testSnap) {
-		t.Errorf("snap = %#v, want %#v", g, testSnap)
-	}
-	if !bytes.Equal(snapData, testSnap.Data) {
-		t.Errorf("snap = %#v, want %#v", snapData, testSnap.Data)
+	defer body.Close()
+	snapBody, _ := ioutil.ReadAll(body)
+	if !bytes.Equal(snapBody, testSnap.Data) {
+		t.Errorf("snap body = %#v, want %#v", snapBody, testSnap.Data)
 	}
 }
 

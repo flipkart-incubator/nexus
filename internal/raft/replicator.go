@@ -211,7 +211,7 @@ func (this *replicator) readCommits() {
 	for entry := range this.node.commitC {
 		if entry == nil {
 			log.Printf("[Node %x] Received a message in the commit channel with no data", this.node.id)
-			snapshot, data, err := this.node.snapshotter.LoadSnapshot()
+			data, err := this.node.snapshotter.LoadDBSnapshot()
 			if err == snap.ErrNoSnapshot {
 				log.Printf("[Node %x] WARNING - Received no snapshot error", this.node.id)
 				continue
@@ -219,7 +219,7 @@ func (this *replicator) readCommits() {
 			if err != nil {
 				log.Panic(err)
 			}
-			log.Printf("[Node %x] Loading snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
+			log.Printf("[Node %x] Loaded DB snapshot", this.node.id)
 			if err := this.store.Restore(data); err != nil {
 				log.Panic(err)
 			}

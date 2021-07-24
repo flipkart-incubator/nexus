@@ -105,8 +105,10 @@ func (s *Snapshotter) LoadSnapshot() (*raftpb.Snapshot, io.ReadCloser, error) {
 		data io.ReadCloser
 	)
 	for _, name := range names {
-		if snap, data, err = loadSnap(s.dir, name); err == nil {
-			break
+		if strings.HasSuffix(name, snapSuffix) {
+			if snap, data, err = loadSnap(s.dir, name); err == nil {
+				break
+			}
 		}
 	}
 	if err != nil {
@@ -115,68 +117,53 @@ func (s *Snapshotter) LoadSnapshot() (*raftpb.Snapshot, io.ReadCloser, error) {
 	return snap, data, nil
 }
 
-func (s *Snapshotter) LoadSnapshotBody(snapshot raftpb.Snapshot) (int64, io.ReadCloser, error) {
+func (s *Snapshotter) LoadDBSnapshot() (io.ReadCloser, error) {
+	names, err := s.snapNames()
+	if err != nil {
+		return nil, err
+	}
+	var	data io.ReadCloser
+	for _, name := range names {
+		if strings.HasSuffix(name, snapDBSuffix) {
+			fpath := filepath.Join(s.dir, name)
+			if data, err = readSnapDB(fpath); err == nil {
+				break
+			}
+		}
+	}
+	if err != nil {
+		return nil, ErrNoSnapshot
+	}
+	return data, nil
+}
+
+func (s *Snapshotter) LoadSnapshotBody(snapshot raftpb.Snapshot) (io.ReadCloser, error) {
 	snapFileName := s.snapFileName(&snapshot)
-	snapFile, err := os.Open(snapFileName)
+	_, data, err := readSnap(snapFileName)
 	if err != nil {
 		log.Printf("ERROR - cannot access snapshot file %v: %v", snapFileName, err)
-		return -1, nil, err
+		return nil, err
 	}
-
-	snapLenBts := make([]byte, 4)
-	numRead, err := snapFile.Read(snapLenBts)
-	if numRead != len(snapLenBts) || err != nil {
-		log.Printf("ERROR - unable to read snapshot file %v: %v", snapFileName, err)
-		return -1, nil, ErrEmptySnapshot
-	}
-
-	snapLen := binary.LittleEndian.Uint32(snapLenBts)
-	return int64(snapLen), snapFile, nil
+	return data, nil
 }
 
 func loadSnap(dir, name string) (snap *raftpb.Snapshot, data io.ReadCloser, err error) {
 	fpath := filepath.Join(dir, name)
-	if strings.HasSuffix(fpath, snapDBSuffix) {
-		snap, data, err = readSnapDB(fpath)
-	} else {
-		snap, data, err = readSnap(fpath)
-	}
+	snap, data, err = readSnap(fpath)
 	if err != nil {
 		renameBroken(fpath)
 	}
 	return
 }
 
-func readSnapDB(snapName string) (*raftpb.Snapshot, io.ReadCloser, error) {
+func readSnapDB(snapName string) (io.ReadCloser, error) {
 	snapFile, err := os.Open(snapName)
 	if err != nil {
 		log.Printf("ERROR - cannot read snapshot DB file %v: %v", snapName, err)
-		return nil, nil, err
+		return nil, err
 	}
 
-	snapLenBts := make([]byte, 8)
-	numRead, err := snapFile.Read(snapLenBts)
-	if numRead != len(snapLenBts) || err != nil {
-		log.Printf("ERROR - unable to read snapshot DB file %v: %v", snapName, err)
-		return nil, nil, ErrEmptySnapshot
-	}
-
-	snapLen := binary.BigEndian.Uint64(snapLenBts)
-	snapBts := make([]byte, snapLen)
-	numRead, err = snapFile.Read(snapBts)
-	if err != nil {
-		log.Printf("ERROR - unable to read snapshot data from DB file %v: %v", snapName, err)
-		return nil, nil, err
-	}
-	if numRead != len(snapBts) {
-		log.Printf("ERROR - unable to read snapshot data from DB file %v. Expected snapshot length: %d, actual: %d",
-			snapName, snapLen, numRead)
-		return nil, nil, ErrInvalidSnapshot
-	}
-
-	msg := new(raftpb.Message)
-	pbutil.MustUnmarshal(msg, snapBts)
-	return &msg.Snapshot, snapFile, nil
+	return snapFile, nil
 }
 
 func readSnap(snapName string) (*raftpb.Snapshot, io.ReadCloser, error) {

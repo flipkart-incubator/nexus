@@ -514,16 +514,20 @@ func (rc *raftNode) sendToTransport(msgs []raftpb.Message) {
 	var nonSnapMsgs []raftpb.Message
 	for _, msg := range msgs {
 		if msg.Type == raftpb.MsgSnap {
-			snapLen, snapReader, err := rc.snapshotter.LoadSnapshotBody(msg.Snapshot)
+			snapReader, err := rc.snapshotter.LoadSnapshotBody(msg.Snapshot)
 			if err != nil {
-				log.Fatalf("nexus.raft: Error while loading snapshot - %v", err)
+				log.Fatalf("nexus.raft: [Node %x] Error while loading snapshot - %v", rc.id, err)
 			}
-			snapMsg := internal_snap.Message{
-				Message:    msg,
-				ReadCloser: snapReader,
-				TotalSize:  snapLen,
+			snapMsg := internal_snap.NewMessage(msg, snapReader, 0)
+			// Overwrite the builtin ReadCloser post init which requires
+			// number of bytes to be known upfront.
+			snapMsg.ReadCloser = snapReader
+			rc.transport.SendSnapshot(*snapMsg)
+			if sent := <- snapMsg.CloseNotify(); sent {
+				log.Printf("nexus.raft: [Node %x] Successfully sent snapshot stream", rc.id)
+			} else {
+				log.Fatalf("nexus.raft: [Node %x] Unable to send snapshot to peer %x. Error - %v", rc.id, msg.To, err)
 			}
-			rc.transport.SendSnapshot(snapMsg)
 		} else {
 			nonSnapMsgs = append(nonSnapMsgs, msg)
 		}
