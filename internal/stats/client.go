@@ -4,6 +4,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/smira/go-statsd"
 )
 
@@ -71,4 +72,8 @@ func (sdc *statsDClient) Timing(name string, startTime time.Time) {
 
 func (sdc *statsDClient) Close() error {
 	return sdc.cli.Close()
+}
+
+func MeasureLatency(observer prometheus.Observer, startTime time.Time) {
+	observer.Observe(time.Since(startTime).Seconds())
 }

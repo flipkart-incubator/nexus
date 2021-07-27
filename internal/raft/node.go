@@ -22,6 +22,7 @@ import (
 	"errors"
 	internal_snap "github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
+	"github.com/prometheus/client_golang/prometheus"
 	"io"
 	"log"
 	"net"
@@ -81,12 +82,27 @@ type raftNode struct {
 	httpdonec  chan struct{} // signals http server shutdown complete
 	readOption raft.ReadOnlyOption
 	statsCli   stats.Client
+	stat       *raftStat
 	rpeers     map[uint64]string
 
 	snapCount              uint64
 	snapshotCatchUpEntries uint64
 	maxSnapFiles           uint
 	maxWALFiles            uint
+}
+
+type raftStat struct {
+	RaftTickProcessingLatency prometheus.Gauge
+}
+
+func newRaftStat() *raftStat {
+	RaftTickProcessingLatency := prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "raft",
+		Name:      "tick_processing_latency",
+		Help:      "Raft tick processing latency",
+	})
+	prometheus.MustRegister(RaftTickProcessingLatency)
+	return &raftStat{RaftTickProcessingLatency}
 }
 
 // NewRaftNode initiates a raft instance and returns a committed log entry
@@ -118,6 +134,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *
 		httpdonec:              make(chan struct{}),
 		readOption:             opts.ReadOption(),
 		statsCli:               statsCli,
+		stat:                   newRaftStat(),
 		maxSnapFiles:           opts.MaxSnapFiles(),
 		maxWALFiles:            opts.MaxWALFiles(),
 		// rest of structure populated after WAL replay
@@ -471,6 +488,7 @@ func (rc *raftNode) serveChannels() {
 		case tick := <-ticker.C:
 			rc.node.Tick()
 			rc.statsCli.Timing("raft.tick.processing.latency.ms", tick)
+			rc.stat.RaftTickProcessingLatency.Set(time.Since(tick).Seconds())
 
 		// store raft entries to wal, then publish over commit channel
 		case rd := <-rc.node.Ready():
@@ -523,7 +541,7 @@ func (rc *raftNode) sendToTransport(msgs []raftpb.Message) {
 			// number of bytes to be known upfront.
 			snapMsg.ReadCloser = snapReader
 			rc.transport.SendSnapshot(*snapMsg)
-			<- snapMsg.CloseNotify()
+			<-snapMsg.CloseNotify()
 		} else {
 			nonSnapMsgs = append(nonSnapMsgs, msg)
 		}
