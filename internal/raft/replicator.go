@@ -4,8 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/flipkart-incubator/nexus/internal/models"
-	"github.com/flipkart-incubator/nexus/internal/raft/snap"
+	"github.com/coreos/etcd/pkg/types"
 	"github.com/golang/protobuf/proto"
 	"log"
 	"net"
@@ -16,6 +15,8 @@ import (
 	"github.com/coreos/etcd/pkg/wait"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/flipkart-incubator/nexus/internal/stats"
+	"github.com/flipkart-incubator/nexus/internal/raft/snap"
+	"github.com/flipkart-incubator/nexus/models"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
 )
@@ -76,10 +77,39 @@ func (this *replicator) Start() {
 	go this.node.purgeFile()
 }
 
-func (this *replicator) ListMembers() (uint64, map[uint64]string) {
-	lead := this.node.getLeaderId()
-	peers := this.node.rpeers
-	return lead, peers
+func (repl *replicator) ListMembers() (uint64, map[uint64]*models.NodeInfo) {
+	lead := repl.node.getLeaderId()
+	members := make(map[uint64]*models.NodeInfo)
+	for id, url := range repl.node.rpeers {
+		activeSince := repl.node.transport.ActiveSince(types.ID(id))
+		nodeInfo := models.NodeInfo{
+			NodeUrl: url,
+			NodeId:  id,
+		}
+		if id == lead {
+			nodeInfo.Status = models.NodeInfo_LEADER
+		} else if activeSince.IsZero() {
+			nodeInfo.Status = models.NodeInfo_OFFLINE
+		} else if id == repl.node.id {
+			//get current node status.
+			status := repl.node.node.Status().RaftState.String()
+			if status == "StateFollower" {
+				nodeInfo.Status = models.NodeInfo_FOLLOWER
+			} else if status == "StateCandidate" || status == "StatePreCandidate" {
+				nodeInfo.Status = models.NodeInfo_CANDIDATE
+			} else {
+				nodeInfo.Status = models.NodeInfo_UNKNOWN
+			}
+		} else if lead != 0 {
+			//This is best effort info.
+			nodeInfo.Status = models.NodeInfo_FOLLOWER
+		} else {
+			nodeInfo.Status = models.NodeInfo_UNKNOWN
+		}
+
+		members[id] = &nodeInfo
+	}
+	return lead, members
 }
 
 func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {

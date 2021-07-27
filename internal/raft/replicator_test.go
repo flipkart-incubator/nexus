@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"github.com/flipkart-incubator/nexus/models"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
 	"io/ioutil"
@@ -47,6 +48,7 @@ func TestReplicator(t *testing.T) {
 func testListMembers(t *testing.T) {
 	members := strings.Split(clusterUrl, ",")
 	clus.assertMembers(t, members)
+	clus.assertRaftMembers(t)
 }
 
 func testSaveLoadLargeData(t *testing.T) {
@@ -287,14 +289,47 @@ func (this *cluster) assertMembers(t *testing.T, members []string) {
 	}
 }
 
+func (this *cluster) assertRaftMembers(t *testing.T) {
+	for _, peer := range this.peers {
+		peer.assertRaftMembers(t)
+	}
+}
+
+func (peer *peer) assertRaftMembers(t *testing.T) {
+	leaderNode, clusNodeInfo := peer.repl.ListMembers()
+	if leaderNode == 0 {
+		t.Errorf("Leader node cannot be 0")
+	}
+
+	leaderCount := 0
+	followerCount := 0
+	for _, node := range clusNodeInfo {
+		if node.Status == models.NodeInfo_LEADER {
+			leaderCount++
+		} else if node.Status == models.NodeInfo_FOLLOWER {
+			followerCount++
+		} else {
+			t.Errorf("Incorrect node status. Actual %s", node.Status.String())
+		}
+	}
+	if leaderCount != 1 {
+		t.Errorf("Incorrect leader counts . Expected %d, Actual %d", 1, leaderCount)
+	}
+	expectedFollowerCount := len(clusNodeInfo) - 1
+	if followerCount != expectedFollowerCount {
+		t.Errorf("Incorrect follower counts . Expected %d, Actual %d", expectedFollowerCount, followerCount)
+	}
+
+}
+
 func (peer *peer) assertMembers(t *testing.T, leader string, members []string) {
 	leaderNode, clusNodes := peer.repl.ListMembers()
-	if clusNodes[leaderNode] != leader {
+	if clusNodes[leaderNode].NodeUrl != leader {
 		t.Errorf("For peer ID: %v, mismatch of URL for leader. Expected: '%v', Actual: '%v'", peer.id, leader, clusNodes[leaderNode])
 	}
 	var clusMembers []string
 	for _, clusNode := range clusNodes {
-		clusMembers = append(clusMembers, clusNode)
+		clusMembers = append(clusMembers, clusNode.NodeUrl)
 	}
 	sort.Strings(clusMembers)
 	sort.Strings(members)
