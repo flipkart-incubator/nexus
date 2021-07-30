@@ -48,6 +48,7 @@ import (
 
 const (
 	purgeFileInterval = 30 * time.Second
+	sendSnapTimeout   = 10 * time.Second
 )
 
 // A key-value stream backed by raft
@@ -523,7 +524,16 @@ func (rc *raftNode) sendToTransport(msgs []raftpb.Message) {
 			// number of bytes to be known upfront.
 			snapMsg.ReadCloser = snapReader
 			rc.transport.SendSnapshot(*snapMsg)
-			<- snapMsg.CloseNotify()
+			go func() {
+				timeout, cancel := context.WithTimeout(context.Background(), sendSnapTimeout)
+				defer cancel()
+				select {
+				case <-timeout.Done():
+					log.Printf("[WARN] nexus.raft: [Node %x] Timed out sending snapshot, waited for %s", rc.id, sendSnapTimeout)
+				case ok := <- snapMsg.CloseNotify():
+					log.Printf("nexus.raft: [Node %x] Completed sending snapshot. Result: %v", rc.id, ok)
+				}
+			} ()
 		} else {
 			nonSnapMsgs = append(nonSnapMsgs, msg)
 		}
