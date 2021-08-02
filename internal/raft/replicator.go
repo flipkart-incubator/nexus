@@ -14,8 +14,8 @@ import (
 	"github.com/coreos/etcd/pkg/idutil"
 	"github.com/coreos/etcd/pkg/wait"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/flipkart-incubator/nexus/internal/stats"
 	"github.com/flipkart-incubator/nexus/internal/raft/snap"
+	"github.com/flipkart-incubator/nexus/internal/stats"
 	"github.com/flipkart-incubator/nexus/models"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
@@ -88,8 +88,6 @@ func (repl *replicator) ListMembers() (uint64, map[uint64]*models.NodeInfo) {
 		}
 		if id == lead {
 			nodeInfo.Status = models.NodeInfo_LEADER
-		} else if activeSince.IsZero() {
-			nodeInfo.Status = models.NodeInfo_OFFLINE
 		} else if id == repl.node.id {
 			//get current node status.
 			status := repl.node.node.Status().RaftState.String()
@@ -100,6 +98,8 @@ func (repl *replicator) ListMembers() (uint64, map[uint64]*models.NodeInfo) {
 			} else {
 				nodeInfo.Status = models.NodeInfo_UNKNOWN
 			}
+		} else if activeSince.IsZero() {
+			nodeInfo.Status = models.NodeInfo_OFFLINE
 		} else if lead != 0 {
 			//This is best effort info.
 			nodeInfo.Status = models.NodeInfo_FOLLOWER
