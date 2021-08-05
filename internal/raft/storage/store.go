@@ -81,6 +81,23 @@ func (es *EntryStore) Entries(lo, hi, maxSize uint64) ([]pb.Entry, error) {
 func (es *EntryStore) Term(i uint64) (uint64, error) {
 	es.Lock()
 	defer es.Unlock()
+
+	firstIdx, err := es.fetchIndexLimit(false)
+	if err != nil {
+		return 0, err
+	}
+	if i < firstIdx {
+		return 0, raft.ErrCompacted
+	}
+
+	lastIdx, err := es.fetchIndexLimit(true)
+	if err != nil {
+		return 0, err
+	}
+	if i > lastIdx {
+		return 0, raft.ErrUnavailable
+	}
+
 	return es.fetchTermForIndex(i)
 }
 
@@ -93,7 +110,8 @@ func (es *EntryStore) LastIndex() (uint64, error) {
 func (es *EntryStore) FirstIndex() (uint64, error) {
 	es.Lock()
 	defer es.Unlock()
-	return es.fetchIndexLimit(false)
+	index, err := es.fetchIndexLimit(false)
+	return index + 1, err
 }
 
 func (es *EntryStore) Snapshot() (pb.Snapshot, error) {
@@ -259,7 +277,7 @@ func (es *EntryStore) fetchIndexLimit(reverse bool) (uint64, error) {
 		return index, nil
 	}
 
-	return 0, raft.ErrUnavailable
+	return 0, nil
 }
 
 func (es *EntryStore) fetchEntries(lo, hi uint64, includeHiIndex bool) ([]pb.Entry, error) {
@@ -303,9 +321,9 @@ func (es *EntryStore) fetchTermForIndex(index uint64) (uint64, error) {
 
 	item, err := txn.Get(indexBts)
 	if err == badger.ErrKeyNotFound {
-		return 0, raft.ErrUnavailable
+		return 0, nil
 	} else if err != nil {
-		return 0, raft.ErrCompacted
+		return 0, err
 	}
 	entBts, err := item.ValueCopy(nil)
 	if err != nil {

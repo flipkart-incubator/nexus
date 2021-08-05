@@ -34,7 +34,7 @@ func TestStorageTerm(t *testing.T) {
 		wterm  uint64
 		wpanic bool
 	}{
-		{2, raft.ErrUnavailable, 0, false},
+		{2, raft.ErrCompacted, 0, false},
 		{3, nil, 3, false},
 		{4, nil, 4, false},
 		{5, nil, 5, false},
@@ -129,7 +129,7 @@ func TestStorageFirstIndex(t *testing.T) {
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
 	}
-	if first != 3 {
+	if first != 4 {
 		t.Errorf("first = %d, want %d", first, 3)
 	}
 
@@ -138,8 +138,17 @@ func TestStorageFirstIndex(t *testing.T) {
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
 	}
-	if first != 4 {
+	if first != 5 {
 		t.Errorf("first = %d, want %d", first, 4)
+	}
+
+	resetStore(t)
+	first, err = store.FirstIndex()
+	if err != nil {
+		t.Errorf("err = %v, want nil", err)
+	}
+	if first != 1 {
+		t.Errorf("first = %d, want %d", first, 0)
 	}
 }
 
@@ -165,7 +174,7 @@ func TestStorageCompact(t *testing.T) {
 		if err != tt.werr {
 			t.Errorf("#%d: err = %v, want %v", i, err, tt.werr)
 		}
-		firstIndex, _ := store.FirstIndex()
+		firstIndex, _ := store.fetchIndexLimit(false)
 		firstTerm, _ := store.Term(firstIndex)
 		if firstIndex != tt.windex {
 			t.Errorf("#%d: index = %d, want %d", i, firstIndex, tt.windex)
@@ -173,7 +182,7 @@ func TestStorageCompact(t *testing.T) {
 		if firstTerm != tt.wterm {
 			t.Errorf("#%d: term = %d, want %d", i, firstTerm, tt.wterm)
 		}
-		lastIndex, _ := store.LastIndex()
+		lastIndex, _ := store.fetchIndexLimit(true)
 		allEnts, _ := store.fetchEntries(firstIndex, lastIndex, true)
 		numEnts := len(allEnts)
 		if numEnts != tt.wlen {
@@ -259,8 +268,8 @@ func TestStorageAppend(t *testing.T) {
 			t.Errorf("#%d: err = %v, want %v", i, err, tt.werr)
 		}
 
-		firstIndex, _ := store.FirstIndex()
-		lastIndex, _ := store.LastIndex()
+		firstIndex, _ := store.fetchIndexLimit(false)
+		lastIndex, _ := store.fetchIndexLimit(true)
 		allEnts, _ := store.fetchEntries(firstIndex, lastIndex, true)
 		if !reflect.DeepEqual(allEnts, tt.wentries) {
 			t.Errorf("#%d: entries = %v, want %v", i, allEnts, tt.wentries)
