@@ -71,7 +71,7 @@ func (es *EntryStore) Entries(lo, hi, maxSize uint64) ([]pb.Entry, error) {
 		log.Panicf("entries' hi(%d) is out of bound lastindex(%d)", hi, endIndex)
 	}
 
-	ents, err := es.fetchEntries(lo, hi)
+	ents, err := es.fetchEntries(lo, hi, false)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (es *EntryStore) Append(entries []pb.Entry) error {
 	if err != nil {
 		return err
 	}
-	if offset := entries[0].Index - lastStoredIndex; offset > 1 {
+	if entries[0].Index > (lastStoredIndex + 1) {
 		log.Panicf("missing log entry [last: %d, append at: %d]",
 			lastStoredIndex, entries[0].Index)
 	}
@@ -262,7 +262,7 @@ func (es *EntryStore) fetchIndexLimit(reverse bool) (uint64, error) {
 	return 0, raft.ErrUnavailable
 }
 
-func (es *EntryStore) fetchEntries(lo, hi uint64) ([]pb.Entry, error) {
+func (es *EntryStore) fetchEntries(lo, hi uint64, includeHiIndex bool) ([]pb.Entry, error) {
 	loBts, hiBts := toIndexBytes(lo), toIndexBytes(hi)
 	txn := es.db.NewTransaction(false)
 	it := txn.NewIterator(badger.IteratorOptions{
@@ -280,14 +280,17 @@ func (es *EntryStore) fetchEntries(lo, hi uint64) ([]pb.Entry, error) {
 	var result []pb.Entry
 	for it.Seek(loBts); it.Valid(); it.Next()  {
 		item := it.Item()
-		if bytes.Compare(item.Key(), hiBts) == 0 {
-			break
-		}
 		if entBts, err := item.ValueCopy(nil); err != nil {
 			return nil, err
 		} else {
 			ent := unmarshalEntry(entBts)
 			result = append(result, *ent)
+		}
+		if bytes.Compare(item.Key(), hiBts) == 0 {
+			if !includeHiIndex {
+				result = result[:len(result)-1]
+			}
+			break
 		}
 	}
 	return result, nil
@@ -351,10 +354,8 @@ func (es *EntryStore) removeEntriesFrom(index uint64, reverse bool) error {
 					return err
 				}
 			}
-			return nil
-		} else {
-			return raft.ErrUnavailable
 		}
+		return nil
 	})
 }
 
