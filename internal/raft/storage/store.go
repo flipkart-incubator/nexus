@@ -154,7 +154,7 @@ func (es *EntryStore) Compact(compactIndex uint64) error {
 		return err
 	}
 
-	if compactIndex < beginIndex {
+	if compactIndex <= beginIndex {
 		return raft.ErrCompacted
 	}
 
@@ -344,6 +344,7 @@ func (es *EntryStore) removeEntriesFrom(index uint64, reverse bool) error {
 		defer it.Close()
 		it.Seek(idxBts)
 		if it.Valid() {
+			it.Next()	// skip seeked index
 			for ; it.Valid(); it.Next() {
 				item := it.Item()
 				if err := txn.Delete(item.Key()); err != nil {

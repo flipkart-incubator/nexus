@@ -138,10 +138,50 @@ func TestStorageFirstIndex(t *testing.T) {
 	if err != nil {
 		t.Errorf("err = %v, want nil", err)
 	}
-	if first != 5 {
-		t.Errorf("first = %d, want %d", first, 5)
+	if first != 4 {
+		t.Errorf("first = %d, want %d", first, 4)
 	}
 }
+
+func TestStorageCompact(t *testing.T) {
+	ents := []pb.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 5}}
+	tests := []struct {
+		i uint64
+
+		werr   error
+		windex uint64
+		wterm  uint64
+		wlen   int
+	}{
+		{2, raft.ErrCompacted, 3, 3, 3},
+		{3, raft.ErrCompacted, 3, 3, 3},
+		{4, nil, 4, 4, 2},
+		{5, nil, 5, 5, 1},
+	}
+
+	for i, tt := range tests {
+		replaceAllEntries(t, ents)
+		err := store.Compact(tt.i)
+		if err != tt.werr {
+			t.Errorf("#%d: err = %v, want %v", i, err, tt.werr)
+		}
+		firstIndex, _ := store.FirstIndex()
+		firstTerm, _ := store.Term(firstIndex)
+		if firstIndex != tt.windex {
+			t.Errorf("#%d: index = %d, want %d", i, firstIndex, tt.windex)
+		}
+		if firstTerm != tt.wterm {
+			t.Errorf("#%d: term = %d, want %d", i, firstTerm, tt.wterm)
+		}
+		lastIndex, _ := store.LastIndex()
+		allEnts, _ := store.fetchEntries(firstIndex, lastIndex)
+		numEnts := len(allEnts) + 1			// including lastIndex, hence plus one
+		if numEnts != tt.wlen {
+			t.Errorf("#%d: len = %d, want %d", i, numEnts, tt.wlen)
+		}
+	}
+}
+
 
 func replaceAllEntries(t *testing.T, ents []pb.Entry) {
 	err := store.replaceAllEntries(ents)
