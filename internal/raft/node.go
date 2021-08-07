@@ -20,9 +20,12 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	internal_snap "github.com/coreos/etcd/snap"
+	"github.com/flipkart-incubator/nexus/internal/raft/storage"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -71,7 +74,7 @@ type raftNode struct {
 
 	// raft backing for the commit/error channel
 	node        raft.Node
-	raftStorage *raft.MemoryStorage
+	raftStorage *storage.EntryStore
 	wal         *wal.WAL
 
 	snapshotter *snap.Snapshotter
@@ -271,7 +274,6 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 	if err != nil {
 		log.Fatalf("nexus.raft: [Node %x] failed to read WAL (%v)", rc.id, err)
 	}
-	rc.raftStorage = raft.NewMemoryStorage()
 	if snapshot != nil {
 		rc.raftStorage.ApplySnapshot(*snapshot)
 	}
@@ -321,6 +323,13 @@ func (rc *raftNode) startRaft() {
 		}
 	}
 	rc.snapshotter = snap.New(rc.snapdir)
+	if entDir, err := ioutil.TempDir(os.TempDir(), fmt.Sprintf("entries_%x", rc.id)); err != nil {
+		log.Fatalf("[Node %x] unable to create temp dir, error: %v", rc.id, err)
+	} else {
+		if rc.raftStorage, err = storage.NewEntryStore(entDir); err != nil {
+			log.Fatalf("[Node %x] unable to create entry store, error: %v", rc.id, err)
+		}
+	}
 
 	oldwal := wal.Exist(rc.waldir)
 	rc.wal = rc.replayWAL()
@@ -378,6 +387,7 @@ func (rc *raftNode) stop() {
 	close(rc.commitC)
 	close(rc.errorC)
 	rc.node.Stop()
+	_ = rc.raftStorage.Close()
 }
 
 func (rc *raftNode) stopHTTP() {

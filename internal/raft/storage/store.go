@@ -35,7 +35,9 @@ func NewEntryStore(entryDir string) (*EntryStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &EntryStore{db: db}, nil
+	ent := &EntryStore{db: db}
+	err = ent.appendEntries(make([]pb.Entry, 1))
+	return ent, err
 }
 
 func (es *EntryStore) InitialState() (pb.HardState, pb.ConfState, error) {
