@@ -3,13 +3,16 @@ package storage
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"github.com/coreos/etcd/pkg/pbutil"
 	"github.com/coreos/etcd/raft"
 	pb "github.com/coreos/etcd/raft/raftpb"
 	"github.com/dgraph-io/badger/v3"
 	bdgr_opts "github.com/dgraph-io/badger/v3/options"
 	"io"
+	"io/ioutil"
 	"log"
+	"os"
 	"sync"
 )
 
@@ -22,6 +25,15 @@ type EntryStore struct {
 	db *badger.DB
 	hardState pb.HardState
 	snapshot  pb.Snapshot
+}
+
+func NewTempEntryStore(nodeId uint64) (*EntryStore, error) {
+	if entDir, err := ioutil.TempDir(os.TempDir(), fmt.Sprintf("entries_%x", nodeId)); err != nil {
+		return nil, err
+	} else {
+		log.Printf("[Node %x] Creating RAFT entry store inside the folder: %s", nodeId, entDir)
+		return NewEntryStore(entDir)
+	}
 }
 
 func NewEntryStore(entryDir string) (*EntryStore, error) {

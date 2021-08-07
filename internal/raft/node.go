@@ -20,12 +20,10 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	internal_snap "github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/internal/raft/storage"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -323,12 +321,9 @@ func (rc *raftNode) startRaft() {
 		}
 	}
 	rc.snapshotter = snap.New(rc.snapdir)
-	if entDir, err := ioutil.TempDir(os.TempDir(), fmt.Sprintf("entries_%x", rc.id)); err != nil {
-		log.Fatalf("[Node %x] unable to create temp dir, error: %v", rc.id, err)
-	} else {
-		if rc.raftStorage, err = storage.NewEntryStore(entDir); err != nil {
-			log.Fatalf("[Node %x] unable to create entry store, error: %v", rc.id, err)
-		}
+	var err error
+	if rc.raftStorage, err = storage.NewTempEntryStore(rc.id); err != nil {
+		log.Fatalf("[Node %x] unable to create entry store, error: %v", rc.id, err)
 	}
 
 	oldwal := wal.Exist(rc.waldir)
