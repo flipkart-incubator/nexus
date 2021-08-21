@@ -2,7 +2,6 @@ package storage
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"github.com/coreos/etcd/pkg/pbutil"
 	"github.com/coreos/etcd/raft"
@@ -13,6 +12,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 	"sync"
 )
 
@@ -67,20 +67,12 @@ func (es *EntryStore) Entries(lo, hi, maxSize uint64) ([]pb.Entry, error) {
 	es.Lock()
 	defer es.Unlock()
 
-	beginIndex, err := es.fetchIndexLimit(false)
-	if err != nil {
-		return nil, err
-	}
-
+	beginIndex := es.fetchIndexLimit(true, false)
 	if lo <= beginIndex {
 		return nil, raft.ErrCompacted
 	}
 
-	endIndex, err := es.fetchIndexLimit(true)
-	if err != nil {
-		return nil, err
-	}
-
+	endIndex := es.fetchIndexLimit(false, true)
 	if hi > (endIndex + 1) {
 		log.Panicf("entries' hi(%d) is out of bound lastindex(%d)", hi, endIndex)
 	}
@@ -96,18 +88,12 @@ func (es *EntryStore) Term(i uint64) (uint64, error) {
 	es.Lock()
 	defer es.Unlock()
 
-	firstIdx, err := es.fetchIndexLimit(false)
-	if err != nil {
-		return 0, err
-	}
+	firstIdx := es.fetchIndexLimit(true, false)
 	if i < firstIdx {
 		return 0, raft.ErrCompacted
 	}
 
-	lastIdx, err := es.fetchIndexLimit(true)
-	if err != nil {
-		return 0, err
-	}
+	lastIdx := es.fetchIndexLimit(false, true)
 	if i > lastIdx {
 		return 0, raft.ErrUnavailable
 	}
@@ -118,14 +104,14 @@ func (es *EntryStore) Term(i uint64) (uint64, error) {
 func (es *EntryStore) LastIndex() (uint64, error) {
 	es.Lock()
 	defer es.Unlock()
-	return es.fetchIndexLimit(true)
+	return es.fetchIndexLimit(false, true), nil
 }
 
 func (es *EntryStore) FirstIndex() (uint64, error) {
 	es.Lock()
 	defer es.Unlock()
-	index, err := es.fetchIndexLimit(false)
-	return index + 1, err
+	index := es.fetchIndexLimit(true, false)
+	return index + 1, nil
 }
 
 func (es *EntryStore) Snapshot() (pb.Snapshot, error) {
@@ -156,10 +142,7 @@ func (es *EntryStore) CreateSnapshot(i uint64, cs *pb.ConfState, data []byte) (p
 		return pb.Snapshot{}, raft.ErrSnapOutOfDate
 	}
 
-	lastIdx, err := es.fetchIndexLimit(true)
-	if err != nil {
-		return pb.Snapshot{}, err
-	}
+	lastIdx := es.fetchIndexLimit(false, true)
 	if i > lastIdx {
 		log.Panicf("snapshot %d is out of bound lastindex(%d)", i, lastIdx)
 	}
@@ -181,20 +164,12 @@ func (es *EntryStore) CreateSnapshot(i uint64, cs *pb.ConfState, data []byte) (p
 func (es *EntryStore) Compact(compactIndex uint64) error {
 	es.Lock()
 	defer es.Unlock()
-	beginIndex, err := es.fetchIndexLimit(false)
-	if err != nil {
-		return err
-	}
-
+	beginIndex := es.fetchIndexLimit(true, false)
 	if compactIndex <= beginIndex {
 		return raft.ErrCompacted
 	}
 
-	endIndex, err := es.fetchIndexLimit(true)
-	if err != nil {
-		return err
-	}
-
+	endIndex := es.fetchIndexLimit(false, true)
 	if compactIndex > endIndex {
 		log.Panicf("compact %d is out of bound lastindex(%d)", compactIndex, endIndex)
 	}
@@ -210,15 +185,12 @@ func (es *EntryStore) Append(entries []pb.Entry) error {
 	defer es.Unlock()
 
 	last := entries[0].Index + uint64(len(entries)) - 1
-	firstStoredIndex, err := es.fetchIndexLimit(false)
-	if err != nil || last <= firstStoredIndex {
-		return err
+	firstStoredIndex := es.fetchIndexLimit(true, false)
+	if last <= firstStoredIndex {
+		return raft.ErrCompacted
 	}
 
-	lastStoredIndex, err := es.fetchIndexLimit(true)
-	if err != nil {
-		return err
-	}
+	lastStoredIndex := es.fetchIndexLimit(false, true)
 	if entries[0].Index > (lastStoredIndex + 1) {
 		log.Panicf("missing log entry [last: %d, append at: %d]",
 			lastStoredIndex, entries[0].Index)
@@ -275,23 +247,27 @@ func limitSize(ents []pb.Entry, maxSize uint64) []pb.Entry {
 	return ents[:limit]
 }
 
-func (es *EntryStore) fetchIndexLimit(reverse bool) (uint64, error) {
+func (es *EntryStore) fetchIndexLimit(min, max bool) uint64 {
 	txn := es.db.NewTransaction(false)
 	it := txn.NewIterator(badger.IteratorOptions{
 		PrefetchValues: false,
-		Reverse:        reverse,
 		AllVersions:    false,
 	})
 	defer txn.Discard()
 	defer it.Close()
 
-	if it.Rewind(); it.Valid() {
+	var resBts []byte
+	var res uint64
+	for it.Rewind(); it.Valid(); it.Next() {
 		indexBts := it.Item().KeyCopy(nil)
 		index := toIndex(indexBts)
-		return index, nil
+		if resBts == nil || (max && index > res) || (min && index < res) {
+			resBts = indexBts
+			res = index
+		}
 	}
 
-	return 0, nil
+	return res
 }
 
 func (es *EntryStore) fetchEntries(lo, hi uint64, includeHiIndex bool) ([]pb.Entry, error) {
@@ -310,7 +286,7 @@ func (es *EntryStore) fetchEntries(lo, hi uint64, includeHiIndex bool) ([]pb.Ent
 	defer it.Close()
 
 	var result []pb.Entry
-	for it.Seek(loBts); it.Valid(); it.Next()  {
+	for it.Seek(loBts); it.Valid(); it.Next() {
 		item := it.Item()
 		if entBts, err := item.ValueCopy(nil); err != nil {
 			return nil, err
@@ -366,33 +342,52 @@ func (es *EntryStore) appendEntries(entries []pb.Entry) error {
 }
 
 func (es *EntryStore) removeEntriesFrom(index uint64, reverse bool) error {
-	return es.db.Update(func(txn *badger.Txn) error {
-		idxBts := toIndexBytes(index)
-		it := txn.NewIterator(badger.IteratorOptions{
-			PrefetchValues: false,
-			Reverse:        reverse,
-			AllVersions:    false,
-			InternalAccess: false,
-			Prefix:         nil,
-			SinceTs:        0,
-		})
-		defer it.Close()
-		it.Seek(idxBts)
-		if it.Valid() {
-			it.Next()	// skip seeked index
-			for ; it.Valid(); it.Next() {
-				item := it.Item()
-				if err := txn.Delete(item.Key()); err != nil {
+	txn := es.db.NewTransaction(true)
+	defer txn.Discard()
+
+	_, err := txn.Get(toIndexBytes(index))
+	if err == badger.ErrKeyNotFound {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	it := txn.NewIterator(badger.IteratorOptions{
+		PrefetchValues: false,
+		AllVersions:    false,
+		InternalAccess: false,
+		Prefix:         nil,
+		SinceTs:        0,
+	})
+
+	for it.Rewind(); it.Valid(); it.Next() {
+		itemKey := it.Item().KeyCopy(nil)
+		currIdx := toIndex(itemKey)
+		if reverse {
+			if currIdx < index {
+				if err := txn.Delete(itemKey); err != nil {
+					return err
+				}
+			}
+		} else {
+			if currIdx > index {
+				if err := txn.Delete(itemKey); err != nil {
 					return err
 				}
 			}
 		}
-		return nil
-	})
+	}
+
+	it.Close()
+	return txn.Commit()
 }
 
 func toIndex(bts []byte) uint64 {
-	return binary.LittleEndian.Uint64(bts)
+	idx, err := strconv.ParseUint(string(bts), 16, 64)
+	if err != nil {
+		log.Fatalf("unable to convert %s into index, error: %v", string(bts), err)
+	}
+	return idx
 }
 
 func unmarshalEntry(entByts []byte) *pb.Entry {
@@ -406,7 +401,5 @@ func marshalEntry(ent *pb.Entry) []byte {
 }
 
 func toIndexBytes(index uint64) []byte {
-	bts := make([]byte, 8)
-	binary.LittleEndian.PutUint64(bts, index)
-	return bts
+	return []byte(strconv.FormatUint(index, 16))
 }
