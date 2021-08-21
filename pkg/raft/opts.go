@@ -34,6 +34,7 @@ type Options interface {
 	NodeId() uint64
 	NodeUrl() *url.URL
 	Join() bool
+	EntryDir() string
 	LogDir() string
 	SnapDir() string
 	ClusterUrls() map[uint64]string
@@ -50,6 +51,7 @@ type Options interface {
 type options struct {
 	nodeUrl                *url.URL
 	nodeUrlStr             string
+	entryDir               string
 	logDir                 string
 	snapDir                string
 	clusterUrl             string
@@ -71,6 +73,7 @@ var (
 
 func init() {
 	flag.StringVar(&opts.nodeUrlStr, "nexus-node-url", "", "Url for the Nexus service to be started on this node (format: http://<local_node>:<port_num>)")
+	flag.StringVar(&opts.entryDir, "nexus-entry-dir", "/tmp/ents", "Dir for storing RAFT entries")
 	flag.StringVar(&opts.logDir, "nexus-log-dir", "/tmp/logs", "Dir for storing RAFT logs")
 	flag.StringVar(&opts.snapDir, "nexus-snap-dir", "/tmp/snap", "Dir for storing RAFT snapshots")
 	flag.StringVar(&opts.clusterUrl, "nexus-cluster-url", "", "Comma separated list of Nexus URLs of other nodes in the cluster")
@@ -89,6 +92,7 @@ func OptionsFromFlags() []Option {
 	return []Option{
 		LogDir(opts.logDir),
 		SnapDir(opts.snapDir),
+		EntryDir(opts.entryDir),
 		ClusterUrl(opts.clusterUrl),
 		NodeUrl(opts.nodeUrlStr),
 		ReplicationTimeout(time.Duration(replTimeoutInSecs) * time.Second),
@@ -136,6 +140,10 @@ func (this *options) LogDir() string {
 
 func (this *options) SnapDir() string {
 	return fmt.Sprintf("%s/node_%d", this.snapDir, this.NodeId())
+}
+
+func (this *options) EntryDir() string {
+	return fmt.Sprintf("%s/node_%d", this.entryDir, this.NodeId())
 }
 
 func (this *options) ClusterUrls() map[uint64]string {
@@ -244,6 +252,17 @@ func SnapDir(dir string) Option {
 			return errors.New("Raft snapshot dir must not be empty")
 		}
 		opts.snapDir = dir
+		return nil
+	}
+}
+
+func EntryDir(dir string) Option {
+	return func(opts *options) error {
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			return errors.New("Raft entry dir must not be empty")
+		}
+		opts.entryDir = dir
 		return nil
 	}
 }

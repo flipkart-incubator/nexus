@@ -22,6 +22,11 @@ func TestSnapDir(t *testing.T) {
 	withError(t, SnapDir("  "))
 }
 
+func TestEntryDir(t *testing.T) {
+	withoutError(t, EntryDir("/folder/foo/dir"))
+	withError(t, EntryDir("  "))
+}
+
 func TestClusterUrl(t *testing.T) {
 	withoutError(t, ClusterUrl("http://site1:9090,http://site2:9090,http://site3:9090"))
 	withError(t, ClusterUrl("http://site1:9090,site2:9090,http://site3:9090"))

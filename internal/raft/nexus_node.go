@@ -61,6 +61,7 @@ type raftNode struct {
 	id          uint64 // client ID for raft session
 	cid         uint64 //clusterId
 	join        bool   // node is joining an existing cluster
+	entDir      string // path for storing entries
 	waldir      string // path to WAL directory
 	snapdir     string // path to snapshot directory
 	getSnapshot func(db.SnapshotState) (io.ReadCloser, error)
@@ -110,6 +111,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *
 		id:                     nodeId,
 		rpeers:                 opts.ClusterUrls(),
 		join:                   opts.Join(),
+		entDir: 				opts.EntryDir(),
 		waldir:                 opts.LogDir(),
 		snapdir:                opts.SnapDir(),
 		getSnapshot:            store.Backup,
@@ -322,7 +324,7 @@ func (rc *raftNode) startRaft() {
 	}
 	rc.snapshotter = snap.New(rc.snapdir)
 	var err error
-	if rc.raftStorage, err = storage.NewTempEntryStore(rc.id); err != nil {
+	if rc.raftStorage, err = storage.NewEntryStore(rc.entDir); err != nil {
 		log.Fatalf("[Node %x] unable to create entry store, error: %v", rc.id, err)
 	}
 
