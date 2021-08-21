@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"bytes"
+	"encoding/binary"
 	"fmt"
 	"github.com/coreos/etcd/pkg/pbutil"
 	"github.com/coreos/etcd/raft"
@@ -12,7 +12,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strconv"
+	"sort"
 	"sync"
 )
 
@@ -270,7 +270,6 @@ func (es *EntryStore) fetchIndexLimits() (min, max uint64) {
 }
 
 func (es *EntryStore) fetchEntries(lo, hi uint64, includeHiIndex bool) ([]pb.Entry, error) {
-	loBts, hiBts := toIndexBytes(lo), toIndexBytes(hi)
 	txn := es.db.NewTransaction(false)
 	it := txn.NewIterator(badger.IteratorOptions{
 		PrefetchSize:   10,
@@ -285,21 +284,26 @@ func (es *EntryStore) fetchEntries(lo, hi uint64, includeHiIndex bool) ([]pb.Ent
 	defer it.Close()
 
 	var result []pb.Entry
-	for it.Seek(loBts); it.Valid(); it.Next() {
+	for it.Rewind(); it.Valid(); it.Next() {
 		item := it.Item()
-		if entBts, err := item.ValueCopy(nil); err != nil {
-			return nil, err
-		} else {
-			ent := unmarshalEntry(entBts)
-			result = append(result, *ent)
-		}
-		if bytes.Compare(item.Key(), hiBts) == 0 {
-			if !includeHiIndex {
-				result = result[:len(result)-1]
+		idx := toIndex(item.Key())
+		if (idx >= lo && idx < hi) || (includeHiIndex && idx == hi) {
+			if entBts, err := item.ValueCopy(nil); err != nil {
+				return nil, err
+			} else {
+				ent := unmarshalEntry(entBts)
+				result = append(result, *ent)
 			}
-			break
 		}
 	}
+
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].Term == result[j].Term {
+			return result[i].Index < result[j].Index
+		}
+		return result[i].Term < result[j].Term
+	})
+
 	return result, nil
 }
 
@@ -382,11 +386,13 @@ func (es *EntryStore) removeEntriesFrom(index uint64, reverse bool) error {
 }
 
 func toIndex(bts []byte) uint64 {
-	idx, err := strconv.ParseUint(string(bts), 16, 64)
-	if err != nil {
-		log.Fatalf("unable to convert %s into index, error: %v", string(bts), err)
-	}
-	return idx
+	return binary.LittleEndian.Uint64(bts)
+}
+
+func toIndexBytes(index uint64) []byte {
+	buff := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buff, index)
+	return buff
 }
 
 func unmarshalEntry(entByts []byte) *pb.Entry {
@@ -397,8 +403,4 @@ func unmarshalEntry(entByts []byte) *pb.Entry {
 
 func marshalEntry(ent *pb.Entry) []byte {
 	return pbutil.MustMarshal(ent)
-}
-
-func toIndexBytes(index uint64) []byte {
-	return []byte(strconv.FormatUint(index, 16))
 }
