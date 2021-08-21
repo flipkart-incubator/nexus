@@ -174,7 +174,7 @@ func TestStorageCompact(t *testing.T) {
 		if err != tt.werr {
 			t.Errorf("#%d: err = %v, want %v", i, err, tt.werr)
 		}
-		firstIndex := store.fetchIndexLimit(true, false)
+		firstIndex, lastIndex := store.fetchIndexLimits()
 		firstTerm, _ := store.Term(firstIndex)
 		if firstIndex != tt.windex {
 			t.Errorf("#%d: index = %d, want %d", i, firstIndex, tt.windex)
@@ -182,7 +182,6 @@ func TestStorageCompact(t *testing.T) {
 		if firstTerm != tt.wterm {
 			t.Errorf("#%d: term = %d, want %d", i, firstTerm, tt.wterm)
 		}
-		lastIndex := store.fetchIndexLimit(false, true)
 		allEnts, _ := store.fetchEntries(firstIndex, lastIndex, true)
 		numEnts := len(allEnts)
 		if numEnts != tt.wlen {
@@ -268,8 +267,7 @@ func TestStorageAppend(t *testing.T) {
 			t.Errorf("#%d: err = %v, want %v", i, err, tt.werr)
 		}
 
-		firstIndex := store.fetchIndexLimit(true, false)
-		lastIndex := store.fetchIndexLimit(false, true)
+		firstIndex, lastIndex := store.fetchIndexLimits()
 		allEnts, _ := store.fetchEntries(firstIndex, lastIndex, true)
 		if !reflect.DeepEqual(allEnts, tt.wentries) {
 			t.Errorf("#%d: entries = %v, want %v", i, allEnts, tt.wentries)

@@ -67,12 +67,11 @@ func (es *EntryStore) Entries(lo, hi, maxSize uint64) ([]pb.Entry, error) {
 	es.Lock()
 	defer es.Unlock()
 
-	beginIndex := es.fetchIndexLimit(true, false)
+	beginIndex, endIndex := es.fetchIndexLimits()
 	if lo <= beginIndex {
 		return nil, raft.ErrCompacted
 	}
 
-	endIndex := es.fetchIndexLimit(false, true)
 	if hi > (endIndex + 1) {
 		log.Panicf("entries' hi(%d) is out of bound lastindex(%d)", hi, endIndex)
 	}
@@ -88,12 +87,11 @@ func (es *EntryStore) Term(i uint64) (uint64, error) {
 	es.Lock()
 	defer es.Unlock()
 
-	firstIdx := es.fetchIndexLimit(true, false)
+	firstIdx, lastIdx := es.fetchIndexLimits()
 	if i < firstIdx {
 		return 0, raft.ErrCompacted
 	}
 
-	lastIdx := es.fetchIndexLimit(false, true)
 	if i > lastIdx {
 		return 0, raft.ErrUnavailable
 	}
@@ -104,14 +102,15 @@ func (es *EntryStore) Term(i uint64) (uint64, error) {
 func (es *EntryStore) LastIndex() (uint64, error) {
 	es.Lock()
 	defer es.Unlock()
-	return es.fetchIndexLimit(false, true), nil
+	_, lastIdx := es.fetchIndexLimits()
+	return lastIdx, nil
 }
 
 func (es *EntryStore) FirstIndex() (uint64, error) {
 	es.Lock()
 	defer es.Unlock()
-	index := es.fetchIndexLimit(true, false)
-	return index + 1, nil
+	firstIdx, _ := es.fetchIndexLimits()
+	return firstIdx + 1, nil
 }
 
 func (es *EntryStore) Snapshot() (pb.Snapshot, error) {
@@ -142,7 +141,7 @@ func (es *EntryStore) CreateSnapshot(i uint64, cs *pb.ConfState, data []byte) (p
 		return pb.Snapshot{}, raft.ErrSnapOutOfDate
 	}
 
-	lastIdx := es.fetchIndexLimit(false, true)
+	_, lastIdx := es.fetchIndexLimits()
 	if i > lastIdx {
 		log.Panicf("snapshot %d is out of bound lastindex(%d)", i, lastIdx)
 	}
@@ -164,12 +163,11 @@ func (es *EntryStore) CreateSnapshot(i uint64, cs *pb.ConfState, data []byte) (p
 func (es *EntryStore) Compact(compactIndex uint64) error {
 	es.Lock()
 	defer es.Unlock()
-	beginIndex := es.fetchIndexLimit(true, false)
+	beginIndex, endIndex := es.fetchIndexLimits()
 	if compactIndex <= beginIndex {
 		return raft.ErrCompacted
 	}
 
-	endIndex := es.fetchIndexLimit(false, true)
 	if compactIndex > endIndex {
 		log.Panicf("compact %d is out of bound lastindex(%d)", compactIndex, endIndex)
 	}
@@ -185,12 +183,11 @@ func (es *EntryStore) Append(entries []pb.Entry) error {
 	defer es.Unlock()
 
 	last := entries[0].Index + uint64(len(entries)) - 1
-	firstStoredIndex := es.fetchIndexLimit(true, false)
+	firstStoredIndex, lastStoredIndex := es.fetchIndexLimits()
 	if last <= firstStoredIndex {
 		return raft.ErrCompacted
 	}
 
-	lastStoredIndex := es.fetchIndexLimit(false, true)
 	if entries[0].Index > (lastStoredIndex + 1) {
 		log.Panicf("missing log entry [last: %d, append at: %d]",
 			lastStoredIndex, entries[0].Index)
@@ -247,7 +244,7 @@ func limitSize(ents []pb.Entry, maxSize uint64) []pb.Entry {
 	return ents[:limit]
 }
 
-func (es *EntryStore) fetchIndexLimit(min, max bool) uint64 {
+func (es *EntryStore) fetchIndexLimits() (min, max uint64) {
 	txn := es.db.NewTransaction(false)
 	it := txn.NewIterator(badger.IteratorOptions{
 		PrefetchValues: false,
@@ -256,18 +253,20 @@ func (es *EntryStore) fetchIndexLimit(min, max bool) uint64 {
 	defer txn.Discard()
 	defer it.Close()
 
-	var resBts []byte
-	var res uint64
+	once := true
 	for it.Rewind(); it.Valid(); it.Next() {
-		indexBts := it.Item().KeyCopy(nil)
-		index := toIndex(indexBts)
-		if resBts == nil || (max && index > res) || (min && index < res) {
-			resBts = indexBts
-			res = index
+		index := toIndex(it.Item().Key())
+		if once {
+			min = index
+			max = index
+			once = false
+		} else if index > max {
+			max = index
+		} else if index < min {
+			min = index
 		}
 	}
-
-	return res
+	return
 }
 
 func (es *EntryStore) fetchEntries(lo, hi uint64, includeHiIndex bool) ([]pb.Entry, error) {
