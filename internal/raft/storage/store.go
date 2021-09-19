@@ -9,6 +9,7 @@ import (
 	bdgr_opts "github.com/dgraph-io/badger/v3/options"
 	"io"
 	"log"
+	"os"
 	"sort"
 	"sync"
 )
@@ -25,9 +26,13 @@ type EntryStore struct {
 }
 
 func NewEntryStore(entryDir string) (*EntryStore, error) {
+	err := os.RemoveAll(entryDir)
+	if err != nil {
+		return nil, err
+	}
 	options := badger.DefaultOptions(entryDir).
 		WithCompression(bdgr_opts.None).
-		WithSyncWrites(true).
+		WithSyncWrites(false).
 		WithMetricsEnabled(false).
 		WithLoggingLevel(badger.ERROR).
 		WithDetectConflicts(false)
