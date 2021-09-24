@@ -48,7 +48,9 @@ func (s *Snapshotter) SaveSnapshot(snapshot raftpb.Snapshot, stream io.Reader) e
 func (s *Snapshotter) saveSnapshot(snapshot *raftpb.Snapshot, stream io.Reader) error {
 	snapFile := s.snapFileName(snapshot)
 	err := s.writeSnap(snapFile, snapshot, stream, 0666)
+	log.Printf("Saving snapshot to file " + snapFile + " with index %d and Term %d", snapshot.Metadata.Index, snapshot.Metadata.Term)
 	if err != nil {
+		log.Printf("Error in saving snapshot " + snapFile + " with error " + err.Error())
 		err1 := os.Remove(snapFile)
 		if err1 != nil {
 			log.Printf("ERROR - failed to remove broken snapshot file %s", snapFile)
@@ -107,6 +109,7 @@ func (s *Snapshotter) LoadSnapshot() (*raftpb.Snapshot, io.ReadCloser, error) {
 	for _, name := range names {
 		if strings.HasSuffix(name, snapSuffix) {
 			if snap, data, err = loadSnap(s.dir, name); err == nil {
+				log.Printf("Got snapshot from file " + name + " LoadSnapshot")
 				break
 			}
 		}
@@ -127,6 +130,7 @@ func (s *Snapshotter) LoadDBSnapshot() (io.ReadCloser, error) {
 		if strings.HasSuffix(name, snapDBSuffix) {
 			fpath := filepath.Join(s.dir, name)
 			if data, err = readSnapDB(fpath); err == nil {
+				log.Printf("Got snapshot from file " + fpath + " LoadDBSnapshot")
 				break
 			}
 		}

@@ -125,6 +125,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *
 	}
 
 	if lastAppliedEntry, err := store.GetLastAppliedEntry(); err == nil {
+		log.Printf("Last Applied Entry Index %d", lastAppliedEntry.Index)
 		rc.appliedIndex = lastAppliedEntry.Index
 	}
 
@@ -273,7 +274,10 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 	}
 	rc.raftStorage = raft.NewMemoryStorage()
 	if snapshot != nil {
-		rc.raftStorage.ApplySnapshot(*snapshot)
+		applyErr := rc.raftStorage.ApplySnapshot(*snapshot)
+		if (applyErr != nil) {
+			log.Printf("Error in applying snapshot " + applyErr.Error())
+		}
 	}
 	rc.raftStorage.SetHardState(st)
 
@@ -482,7 +486,10 @@ func (rc *raftNode) serveChannels() {
 			rc.wal.Save(rd.HardState, rd.Entries)
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				rc.saveSnap(rd.Snapshot, bytes.NewReader(rd.Snapshot.Data))
-				rc.raftStorage.ApplySnapshot(rd.Snapshot)
+				applyErr := rc.raftStorage.ApplySnapshot(rd.Snapshot)
+				if (applyErr != nil) {
+					log.Printf("Error in applying snapshot " + applyErr.Error())
+				}
 				rc.publishSnapshot(rd.Snapshot)
 			}
 			rc.raftStorage.Append(rd.Entries)
