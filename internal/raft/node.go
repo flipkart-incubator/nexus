@@ -212,6 +212,7 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 		}
 		// after commit, update appliedIndex
 		rc.appliedIndex = ents[i].Index
+		log.Printf("Updating applied index to %d", rc.appliedIndex)
 
 		// special nil commit to signal replay has finished
 		if ents[i].Index == rc.lastIndex {
@@ -485,6 +486,7 @@ func (rc *raftNode) serveChannels() {
 			}
 			rc.wal.Save(rd.HardState, rd.Entries)
 			if !raft.IsEmptySnap(rd.Snapshot) {
+				log.Printf("Getting snapshot on raft")
 				rc.saveSnap(rd.Snapshot, bytes.NewReader(rd.Snapshot.Data))
 				applyErr := rc.raftStorage.ApplySnapshot(rd.Snapshot)
 				if (applyErr != nil) {
