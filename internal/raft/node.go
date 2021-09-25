@@ -477,7 +477,7 @@ func (rc *raftNode) serveChannels() {
 		case tick := <-ticker.C:
 			rc.node.Tick()
 			rc.statsCli.Timing("raft.tick.processing.latency.ms", tick)
-
+			rc.maybeTriggerSnapshot()
 		// store raft entries to wal, then publish over commit channel
 		case rd := <-rc.node.Ready():
 			if ok := rc.publishReadStates(rd.ReadStates); !ok {
@@ -500,7 +500,6 @@ func (rc *raftNode) serveChannels() {
 				rc.stop()
 				return
 			}
-			rc.maybeTriggerSnapshot()
 			rc.node.Advance()
 
 		case err := <-rc.transport.ErrorC:
