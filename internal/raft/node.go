@@ -216,6 +216,7 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 
 		// special nil commit to signal replay has finished
 		if ents[i].Index == rc.lastIndex {
+			log.Printf("Last Index applied. Will be sending nil msg now")
 			select {
 			case rc.commitC <- nil:
 			case <-rc.stopc:
@@ -287,7 +288,9 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 	// send nil once lastIndex is published so client knows commit channel is current
 	if len(ents) > 0 {
 		rc.lastIndex = ents[len(ents)-1].Index
+		log.Printf("Setting last index to %d", rc.lastIndex)
 	} else {
+		log.Printf("Sending nil in commit channel in replayWAL")
 		rc.commitC <- nil
 	}
 	return w
