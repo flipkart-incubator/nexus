@@ -215,14 +215,14 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 		log.Printf("Updating applied index to %d", rc.appliedIndex)
 
 		// special nil commit to signal replay has finished
-		if ents[i].Index == rc.lastIndex {
+		//if ents[i].Index == rc.lastIndex {
 			log.Printf("Last Index applied. Will be sending nil msg now")
-			select {
-			case rc.commitC <- nil:
-			case <-rc.stopc:
-				return false
-			}
-		}
+		//	select {
+		//	case rc.commitC <- nil:
+		//	case <-rc.stopc:
+		//		return false
+		//	}
+		//}
 	}
 	return true
 }
@@ -291,7 +291,7 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 		log.Printf("Setting last index to %d", rc.lastIndex)
 	} else {
 		log.Printf("Sending nil in commit channel in replayWAL")
-		rc.commitC <- nil
+		//rc.commitC <- nil
 	}
 	return w
 }
