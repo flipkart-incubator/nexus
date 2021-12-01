@@ -51,7 +51,7 @@ const (
 	// max number of in-flight snapshot messages nexus allows to have
 	// This number is more than enough for most clusters with 5 machines.
 	maxInFlightMsgSnap = 16
-	sendSnapTimeout   = 10 * time.Second
+	sendSnapTimeout    = 10 * time.Second
 )
 
 // apply contains entries, snapshot to be applied. Once
@@ -163,6 +163,9 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *
 }
 
 func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
+	// must save the snapshot index to the WAL before saving the
+	// snapshot to maintain the invariant that we only Open the
+	// wal at previously-saved snapshot indexes.
 	walSnap := walpb.Snapshot{
 		Index:     snap.Metadata.Index,
 		Term:      snap.Metadata.Term,
@@ -202,7 +205,6 @@ func (rc *raftNode) getLeaderId() uint64 {
 // publishEntries writes committed log entries to commit channel and returns
 // whether all entries could be published.
 func (rc *raftNode) publishEntries(ents []raftpb.Entry, snap raftpb.Snapshot) (<-chan struct{}, bool) {
-
 	if len(ents) == 0 {
 		return nil, true
 	}
@@ -362,15 +364,15 @@ func (rc *raftNode) startRaft() {
 		rpeers = append(rpeers, raft.Peer{ID: id, Context: []byte(peer)})
 	}
 	c := &raft.Config{
-		ID:              rc.id,
-		ElectionTick:    10,
-		HeartbeatTick:   1,
-		Storage:         rc.raftStorage,
-		MaxSizePerMsg:   1024 * 1024,
-		MaxInflightMsgs: 256,
-		ReadOnlyOption:  rc.readOption,
-		CheckQuorum:     rc.readOption == raft.ReadOnlyLeaseBased,
-		Applied:         rc.appliedIndex,
+		ID:                        rc.id,
+		ElectionTick:              10,
+		HeartbeatTick:             1,
+		Storage:                   rc.raftStorage,
+		MaxSizePerMsg:             1024 * 1024,
+		MaxInflightMsgs:           256,
+		ReadOnlyOption:            rc.readOption,
+		CheckQuorum:               rc.readOption == raft.ReadOnlyLeaseBased,
+		Applied:                   rc.appliedIndex,
 		MaxUncommittedEntriesSize: 1 << 30,
 	}
 

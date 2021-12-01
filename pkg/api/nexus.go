@@ -10,7 +10,6 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
-
 type RaftReplicator interface {
 	Start()
 	Id() uint64

@@ -65,7 +65,6 @@ func NewReplicator(store db.Store, options pkg_raft.Options) *replicator {
 		statsCli:        statsCli,
 		opts:            options,
 	}
-
 	return repl
 }
 
@@ -345,7 +344,7 @@ func (this *replicator) sendSnapshots() error {
 			stat, _ := rc.Stat()
 			mergedSnap := *snap.NewMessage(m, rc, stat.Size())
 
-			log.Printf("nexus.raft: [Node %x] Sending snap(T%d)+db(%s) snapshot to  %x \n", this.node.id, snapshot.Metadata.Index ,path.Base(dbFile), m.To)
+			log.Printf("nexus.raft: [Node %x] Sending snap(T%d)+db(%s) snapshot to  %x \n", this.node.id, snapshot.Metadata.Index, path.Base(dbFile), m.To)
 
 			//atomic.AddInt64(&s.inflightSnapshots, 1)
 			this.node.transport.SendSnapshot(mergedSnap)
