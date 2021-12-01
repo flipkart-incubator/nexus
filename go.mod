@@ -9,10 +9,10 @@ require (
 	github.com/onsi/ginkgo v1.12.0 // indirect
 	github.com/onsi/gomega v1.9.0 // indirect
 	github.com/smira/go-statsd v1.3.1
-	go.etcd.io/etcd/client/pkg/v3 v3.5.0-rc.1
-	go.etcd.io/etcd/pkg/v3 v3.5.0-rc.1
-	go.etcd.io/etcd/raft/v3 v3.5.0-rc.1
-	go.etcd.io/etcd/server/v3 v3.5.0-rc.1
+	go.etcd.io/etcd/client/pkg/v3 v3.5.1
+	go.etcd.io/etcd/pkg/v3 v3.5.1
+	go.etcd.io/etcd/raft/v3 v3.5.1
+	go.etcd.io/etcd/server/v3 v3.5.1
 	go.uber.org/zap v1.17.0
 	google.golang.org/grpc v1.38.0
 	google.golang.org/protobuf v1.27.1
