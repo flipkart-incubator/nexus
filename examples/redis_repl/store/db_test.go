@@ -17,11 +17,11 @@ import (
 var store *redisStore
 
 const (
-	redisHost = "127.0.0.1"
-	redisPort = 6379
-	keyPref   = "NEXUS_TEST"
-	value     = "hello_world"
-	redisDB   = 2
+	redisHost  = "127.0.0.1"
+	redisPort  = 6379
+	keyPref    = "NEXUS_TEST"
+	value      = "hello_world"
+	redisDB    = 2
 	metadataDB = 13
 )
 
@@ -42,7 +42,7 @@ func insertKey(t *testing.T, key, val string, dbIdx int) {
 	saveReq := fmt.Sprintf("return redis.call('set', '%s', '%s')", key, val)
 	req := &api.SaveRequest{
 		Data: []byte(saveReq),
-		Args: map[string][]byte {DBIndexKey: []byte(strconv.Itoa(dbIdx))},
+		Args: map[string][]byte{DBIndexKey: []byte(strconv.Itoa(dbIdx))},
 	}
 	reqBts, _ := req.Encode()
 	if saveRes, err := store.Save(db.RaftEntry{Term: 2, Index: 10}, reqBts); err != nil {
@@ -56,7 +56,7 @@ func deleteKey(t *testing.T, key string, dbIdx int) {
 	delReq := fmt.Sprintf("return redis.call('del', '%s')", key)
 	req := &api.SaveRequest{
 		Data: []byte(delReq),
-		Args: map[string][]byte {DBIndexKey: []byte(strconv.Itoa(dbIdx))},
+		Args: map[string][]byte{DBIndexKey: []byte(strconv.Itoa(dbIdx))},
 	}
 	reqBts, _ := req.Encode()
 	if delRes, err := store.Save(db.RaftEntry{}, reqBts); err != nil {
@@ -70,7 +70,7 @@ func assertKey(t *testing.T, key, expVal string, dbIdx int) {
 	loadReq := fmt.Sprintf("return redis.call('get', '%s')", key)
 	req := &api.LoadRequest{
 		Data: []byte(loadReq),
-		Args: map[string][]byte {DBIndexKey: []byte(strconv.Itoa(dbIdx))},
+		Args: map[string][]byte{DBIndexKey: []byte(strconv.Itoa(dbIdx))},
 	}
 	reqBts, _ := req.Encode()
 	if loadRes, err := store.Save(db.RaftEntry{}, reqBts); err != nil {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/coreos/etcd/pkg/types"
 	"github.com/golang/protobuf/proto"
 	"log"
 	"net"
@@ -13,14 +12,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coreos/etcd/pkg/idutil"
-	"github.com/coreos/etcd/pkg/wait"
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	"github.com/flipkart-incubator/nexus/models"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
+	"go.etcd.io/etcd/client/pkg/v3/types"
+	"go.etcd.io/etcd/pkg/v3/idutil"
+	"go.etcd.io/etcd/pkg/v3/wait"
+	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/snap"
 )
 
 type internalNexusResponse struct {
@@ -344,7 +344,7 @@ func (this *replicator) sendSnapshots() error {
 			stat, _ := rc.Stat()
 			mergedSnap := *snap.NewMessage(m, rc, stat.Size())
 
-			log.Printf("nexus.raft: [Node %x] Sending snap(T%d)+db(%s) snapshot to  %x \n", this.node.id, snapshot.Metadata.Index ,path.Base(dbFile), m.To)
+			log.Printf("nexus.raft: [Node %x] Sending snap(T%d)+db(%s) snapshot to  %x \n", this.node.id, snapshot.Metadata.Index, path.Base(dbFile), m.To)
 
 			//atomic.AddInt64(&s.inflightSnapshots, 1)
 			this.node.transport.SendSnapshot(mergedSnap)

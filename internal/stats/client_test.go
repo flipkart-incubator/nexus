@@ -31,6 +31,11 @@ func TestStatsDClient(t *testing.T) {
 		return
 	}
 
+	if conn == nil {
+		t.Log("Failed to connect to StatsD endpoint, skipping test...")
+		return
+	}
+
 	s, w := bufio.NewScanner(conn), bufio.NewWriter(conn)
 	//flushDuration := statsdFlushInterval(s, w)
 	flushDuration := time.Duration(500) * time.Millisecond
