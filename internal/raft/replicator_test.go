@@ -225,6 +225,9 @@ func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 		// assert membership across all nodes
 		peer4.assertMembers(t, peer4.getLeaderUrl(), members)
 
+		t.Log("Node 4 is good.")
+		sleep(5)
+
 		//// remove this peer
 		if err = peer1.repl.RemoveMember(context.Background(), peer4Url); err != nil {
 			t.Fatal(err)
