@@ -1,13 +1,15 @@
 package api
 
 import (
-	context "context"
+	"context"
 	"errors"
-
 	internal_raft "github.com/flipkart-incubator/nexus/internal/raft"
+	"github.com/flipkart-incubator/nexus/models"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"github.com/flipkart-incubator/nexus/pkg/raft"
+	"github.com/golang/protobuf/proto"
 )
+
 
 type RaftReplicator interface {
 	Start()
@@ -16,7 +18,7 @@ type RaftReplicator interface {
 	Load(context.Context, []byte) ([]byte, error)
 	AddMember(context.Context, string) error
 	RemoveMember(context.Context, string) error
-	ListMembers() (uint64, map[uint64]string)
+	ListMembers() (uint64, map[uint64]*models.NodeInfo)
 	Stop()
 }
 
@@ -29,4 +31,20 @@ func NewRaftReplicator(store db.Store, opts ...raft.Option) (RaftReplicator, err
 	} else {
 		return internal_raft.NewReplicator(store, options), nil
 	}
+}
+
+func (req *SaveRequest) Encode() ([]byte, error) {
+	return proto.Marshal(req)
+}
+
+func (req *SaveRequest) Decode(data []byte) error {
+	return proto.Unmarshal(data, req)
+}
+
+func (req *LoadRequest) Encode() ([]byte, error) {
+	return proto.Marshal(req)
+}
+
+func (req *LoadRequest) Decode(data []byte) error {
+	return proto.Unmarshal(data, req)
 }

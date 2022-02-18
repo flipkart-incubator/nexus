@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/flipkart-incubator/nexus/models"
 	"hash/fnv"
 	"testing"
 
@@ -23,8 +24,8 @@ func TestNexusService(t *testing.T) {
 	defer ns.Close()
 	go ns.ListenAndServe()
 
-	svc_addr := fmt.Sprintf("%s:%d", svcHost, svcPort)
-	if nc, err := NewInSecureNexusClient(svc_addr); err != nil {
+	svcAddr := fmt.Sprintf("%s:%d", svcHost, svcPort)
+	if nc, err := NewInSecureNexusClient(svcAddr); err != nil {
 		t.Fatal(err)
 	} else {
 		defer nc.Close()
@@ -45,7 +46,7 @@ func checkHealth(t *testing.T, nc *NexusClient) {
 }
 
 func replicate(t *testing.T, nc *NexusClient, data []byte) {
-	if _, err := nc.Save(data); err != nil {
+	if _, err := nc.Save(data, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -74,29 +75,33 @@ func (this *mockRepl) Start() {
 func (this *mockRepl) Stop() {
 }
 
-func (this *mockRepl) Load(ctx context.Context, data []byte) ([]byte, error) {
-	id := binary.BigEndian.Uint32(data)
+func (this *mockRepl) Load(_ context.Context, data []byte) ([]byte, error) {
+	req := new(api.LoadRequest)
+	_ = req.Decode(data)
+	id := binary.BigEndian.Uint32(req.Data)
 	return this.data[id], nil
 }
 
-func (this *mockRepl) Save(ctx context.Context, data []byte) ([]byte, error) {
-	if hsh, err := hashCode(data); err != nil {
+func (this *mockRepl) Save(_ context.Context, data []byte) ([]byte, error) {
+	req := new(api.SaveRequest)
+	_ = req.Decode(data)
+	if hsh, err := hashCode(req.Data); err != nil {
 		return nil, err
 	} else {
-		this.data[hsh] = data
+		this.data[hsh] = req.Data
 		return nil, nil
 	}
 }
 
-func (this *mockRepl) AddMember(ctx context.Context, nodeUrl string) error {
+func (this *mockRepl) AddMember(context.Context, string) error {
 	return errors.New("mockRepl::AddMember not implemented")
 }
 
-func (this *mockRepl) RemoveMember(ctx context.Context, nodeUrl string) error {
+func (this *mockRepl) RemoveMember(context.Context, string) error {
 	return errors.New("mockRepl::RemoveMember not implemented")
 }
 
-func (this *mockRepl) ListMembers() (uint64, map[uint64]string) {
+func (this *mockRepl) ListMembers() (uint64, map[uint64]*models.NodeInfo) {
 	return uint64(0), nil
 }
 

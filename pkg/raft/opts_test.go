@@ -63,6 +63,24 @@ func TestDiscoverAddr(t *testing.T) {
 	}
 }
 
+func TestClusterId(t *testing.T) {
+	if opts, err := NewOptions(ClusterUrl("http://127.0.0.1:9090,http://site2:9090,http://site3:9090"), NodeUrl("")); err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	} else {
+		if opts.ClusterId() != 0 {
+			t.Errorf("Expected clusterID to be 0 when clusterName is not provided. Got %d ", opts.ClusterId())
+		}
+	}
+
+	if opts, err := NewOptions(ClusterName("some-name")); err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	} else {
+		if opts.ClusterId() == 0 {
+			t.Errorf("Expected clusterID to be non 0 when clusterName is provided. Got %d ", opts.ClusterId())
+		}
+	}
+}
+
 func withError(t *testing.T, opt Option) {
 	if _, err := NewOptions(opt); err != nil {
 		t.Logf("As expected, received error: %v", err)

@@ -30,7 +30,7 @@ endif
 .PHONY: protoc
 protoc:
 	@echo ">> generating proto code"
-	@for proto_dir in $(PROTOBUFS); do echo $$proto_dir; protoc --proto_path=$$proto_dir --go_out=plugins=grpc:$$proto_dir $$proto_dir/*.proto || exit 1; done
+	@for proto_dir in $(PROTOBUFS); do echo $$proto_dir; protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,paths=source_relative $$proto_dir/*.proto || exit 1; done
 
 .PHONY: format
 format:

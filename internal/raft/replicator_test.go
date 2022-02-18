@@ -6,9 +6,15 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"github.com/flipkart-incubator/nexus/models"
+	"github.com/flipkart-incubator/nexus/pkg/db"
+	"io"
+	"io/ioutil"
+	"math/rand"
 	"os"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -23,12 +29,14 @@ const (
 	snapDir     = "/tmp/nexus_test/snap"
 	clusterUrl  = "http://127.0.0.1:9321,http://127.0.0.1:9322,http://127.0.0.1:9323"
 	peer4Url    = "http://127.0.0.1:9324"
+	peer5Url    = "http://127.0.0.1:9325"
 	replTimeout = 3 * time.Second
 )
 
 var clus *cluster
 
 func TestReplicator(t *testing.T) {
+	rand.Seed(time.Now().UTC().UnixNano())
 	clus = startCluster(t)
 	defer clus.stop()
 
@@ -37,12 +45,44 @@ func TestReplicator(t *testing.T) {
 	t.Run("testSaveLoadLargeData", testSaveLoadLargeData)
 	t.Run("testLoadDuringRestarts", testLoadDuringRestarts)
 	t.Run("testForNewNexusNodeJoinLeaveCluster", testForNewNexusNodeJoinLeaveCluster)
+	t.Run("testSaveLoadReallyLargeData", testSaveLoadReallyLargeData)
+	t.Run("testForNewNexusNodeJoinHighDataClusterDataMismatch", testForNewNexusNodeJoinHighDataClusterDataMismatch)
 	t.Run("testForNodeRestart", testForNodeRestart)
 }
 
 func testListMembers(t *testing.T) {
 	members := strings.Split(clusterUrl, ",")
 	clus.assertMembers(t, members)
+	clus.assertRaftMembers(t)
+}
+
+func testSaveLoadReallyLargeData(t *testing.T) {
+	var reqs []*kvReq
+	iterations := 50
+	// Saving
+	writePeer := clus.peers[0]
+	runId := writePeer.id
+	token := make([]byte, 1024*1024*2) //1mb
+	rand.Read(token)
+
+	for i := 0; i < iterations; i++ {
+		req1 := &kvReq{fmt.Sprintf("Key:KL%d#%d", runId, i), fmt.Sprintf("Val:%d#%d$%s", runId, i, token)}
+		writePeer.save(t, req1)
+		reqs = append(reqs, req1)
+		t.Logf("Write KEY : %s", req1.Key)
+	}
+
+	//assertions
+	clus.assertDB(t, reqs...)
+
+	//Read
+	for i := 0; i < iterations; i++ {
+		req1 := &kvReq{fmt.Sprintf("Key:KL%d#%d", runId, i), fmt.Sprintf("Val:%d#%d$%s", runId, i, token)}
+		actVal := writePeer.load(t, req1).(string)
+		if req1.Val != actVal {
+			t.Errorf("Value mismatch for peer: %d. Key: %s, Expected Value: %s, Actual Value: %s", writePeer.id, req1.Key, req1.Val, actVal)
+		}
+	}
 }
 
 func testSaveLoadLargeData(t *testing.T) {
@@ -168,7 +208,7 @@ func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 		peer1 := clus.peers[0]
 
 		// add peer to existing cluster
-		if err := peer1.repl.AddMember(context.Background(), peer4Url); err != nil {
+		if err = peer1.repl.AddMember(context.Background(), peer4Url); err != nil {
 			t.Fatal(err)
 		}
 		sleep(3)
@@ -185,8 +225,8 @@ func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 		// assert membership across all nodes
 		peer4.assertMembers(t, peer4.getLeaderUrl(), members)
 
-		// remove this peer
-		if err := peer1.repl.RemoveMember(context.Background(), peer4Url); err != nil {
+		//// remove this peer
+		if err = peer1.repl.RemoveMember(context.Background(), peer4Url); err != nil {
 			t.Fatal(err)
 		}
 		sleep(3)
@@ -195,6 +235,73 @@ func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 		clus.assertMembers(t, members[0:len(members)-1])
 		peer4.stop()
 	}
+}
+
+func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
+	// create a new peer
+	if peer5, err := newJoiningPeer(peer5Url); err != nil {
+		t.Fatal(err)
+	} else {
+		// start the peer
+		peer5.start()
+		sleep(5)
+		peer1 := clus.peers[0]
+
+		// add peer to existing cluster
+		if err = peer1.repl.AddMember(context.Background(), peer5Url); err != nil {
+			t.Fatal(err)
+		}
+		sleep(30)
+		members := strings.Split(clusterUrl, ",")
+		members = append(members, peer5Url)
+		clus.assertMembers(t, members)
+
+		//raft index
+		if !reflect.DeepEqual(peer1.repl.node.appliedIndex, peer5.repl.node.appliedIndex) {
+			t.Fatalf("Raft appliedIndex should match. Expectd %d Got %d", peer1.repl.node.appliedIndex, peer5.repl.node.appliedIndex)
+		}
+
+		db5, db1 := peer5.db.content, peer1.db.content
+
+		//lets match the num keys count.
+		if len(db5) != len(db1) {
+			//find difference of keys
+			keyDiff := difference(db1, db5)
+			t.Fatalf("DB Mismatch Happened. Missing keys (%d) %+v !!!", len(keyDiff), keyDiff)
+		}
+
+		if !reflect.DeepEqual(db5, db1) {
+			t.Fatal("DB Mismatch Happened. Not Expected !!!")
+		}
+
+		// assert membership across all nodes
+		peer5.assertMembers(t, peer5.getLeaderUrl(), members)
+
+		// remove this peer
+		if err = peer1.repl.RemoveMember(context.Background(), peer5Url); err != nil {
+			t.Fatal(err)
+		}
+		sleep(3)
+
+		// assert membership across all nodes
+		clus.assertMembers(t, members[0:len(members)-1])
+		peer5.stop()
+	}
+}
+
+// difference returns the elements in `a` that aren't in `b`.
+func difference(a, b map[string]interface{}) []string {
+	mb := make(map[string]struct{}, len(b))
+	for x, _ := range b {
+		mb[x] = struct{}{}
+	}
+	var diff []string
+	for x, _ := range a {
+		if _, found := mb[x]; !found {
+			diff = append(diff, x)
+		}
+	}
+	return diff
 }
 
 func testForNodeRestart(t *testing.T) {
@@ -283,14 +390,47 @@ func (this *cluster) assertMembers(t *testing.T, members []string) {
 	}
 }
 
+func (this *cluster) assertRaftMembers(t *testing.T) {
+	for _, peer := range this.peers {
+		peer.assertRaftMembers(t)
+	}
+}
+
+func (peer *peer) assertRaftMembers(t *testing.T) {
+	leaderNode, clusNodeInfo := peer.repl.ListMembers()
+	if leaderNode == 0 {
+		t.Errorf("Leader node cannot be 0")
+	}
+
+	leaderCount := 0
+	followerCount := 0
+	for _, node := range clusNodeInfo {
+		if node.Status == models.NodeInfo_LEADER {
+			leaderCount++
+		} else if node.Status == models.NodeInfo_FOLLOWER {
+			followerCount++
+		} else {
+			t.Errorf("Incorrect node status. Actual %s", node.Status.String())
+		}
+	}
+	if leaderCount != 1 {
+		t.Errorf("Incorrect leader counts . Expected %d, Actual %d", 1, leaderCount)
+	}
+	expectedFollowerCount := len(clusNodeInfo) - 1
+	if followerCount != expectedFollowerCount {
+		t.Errorf("Incorrect follower counts . Expected %d, Actual %d", expectedFollowerCount, followerCount)
+	}
+
+}
+
 func (peer *peer) assertMembers(t *testing.T, leader string, members []string) {
 	leaderNode, clusNodes := peer.repl.ListMembers()
-	if clusNodes[leaderNode] != leader {
+	if clusNodes[leaderNode].NodeUrl != leader {
 		t.Errorf("For peer ID: %v, mismatch of URL for leader. Expected: '%v', Actual: '%v'", peer.id, leader, clusNodes[leaderNode])
 	}
 	var clusMembers []string
 	for _, clusNode := range clusNodes {
-		clusMembers = append(clusMembers, clusNode)
+		clusMembers = append(clusMembers, clusNode.NodeUrl)
 	}
 	sort.Strings(clusMembers)
 	sort.Strings(members)
@@ -314,10 +454,10 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 		raft.ClusterUrl(clusterUrl),
 		raft.ReplicationTimeout(replTimeout),
 		raft.LeaseBasedReads(false),
-		raft.SnapshotCatchUpEntries(5),
-		raft.SnapshotCount(10),
-		raft.MaxWALFiles(2),
-		raft.MaxSnapFiles(2),
+		raft.SnapshotCatchUpEntries(25),
+		raft.SnapshotCount(50),
+		raft.MaxWALFiles(1),
+		raft.MaxSnapFiles(1),
 	)
 	if err != nil {
 		return nil, err
@@ -328,8 +468,8 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 }
 
 func newPeer(id int) (*peer, error) {
-	db := newInMemKVStore()
-	return newPeerWithDB(id, db)
+	memKVStore := newInMemKVStore()
+	return newPeerWithDB(id, memKVStore)
 }
 
 func newJoiningPeer(peerAddr string) (*peer, error) {
@@ -340,13 +480,17 @@ func newJoiningPeer(peerAddr string) (*peer, error) {
 		raft.ClusterUrl(clusterUrl),
 		raft.ReplicationTimeout(replTimeout),
 		raft.LeaseBasedReads(false),
+		raft.SnapshotCatchUpEntries(25),
+		raft.SnapshotCount(50),
+		raft.MaxWALFiles(1),
+		raft.MaxSnapFiles(1),
 	)
 	if err != nil {
 		return nil, err
 	} else {
-		db := newInMemKVStore()
-		repl := NewReplicator(db, opts)
-		return &peer{repl.node.id, db, repl}, nil
+		memKVStore := newInMemKVStore()
+		repl := NewReplicator(memKVStore, opts)
+		return &peer{repl.node.id, memKVStore, repl}, nil
 	}
 }
 
@@ -457,16 +601,21 @@ func (this *kvReq) toBytes() ([]byte, error) {
 }
 
 type inMemKVStore struct {
-	mu      sync.Mutex
-	content map[string]interface{}
+	mu        sync.Mutex
+	content   map[string]interface{}
+	currEntry db.RaftEntry
 }
 
 func newInMemKVStore() *inMemKVStore {
 	return &inMemKVStore{content: make(map[string]interface{})}
 }
 
-func (this *inMemKVStore) Close() error {
-	return nil
+func (this *inMemKVStore) Close() (_ error) {
+	return
+}
+
+func (this *inMemKVStore) GetLastAppliedEntry() (db.RaftEntry, error) {
+	return this.currEntry, nil
 }
 
 func (this *inMemKVStore) Load(data []byte) ([]byte, error) {
@@ -484,7 +633,7 @@ func (this *inMemKVStore) Load(data []byte) ([]byte, error) {
 	}
 }
 
-func (this *inMemKVStore) Save(data []byte) ([]byte, error) {
+func (this *inMemKVStore) Save(raftEntry db.RaftEntry, data []byte) ([]byte, error) {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	if kvReq, err := fromBytes(data); err != nil {
@@ -495,29 +644,45 @@ func (this *inMemKVStore) Save(data []byte) ([]byte, error) {
 			return nil, errors.New(fmt.Sprintf("Given key: %s already exists", key))
 		} else {
 			this.content[key] = kvReq.Val
+			this.currEntry = raftEntry
 			return nil, nil
 		}
 	}
 }
 
-func (this *inMemKVStore) Backup() ([]byte, error) {
+const (
+	raftTermKey  = "raft.term"
+	raftIndexKey = "raft.index"
+)
+
+func (this *inMemKVStore) Backup(_ db.SnapshotState) (io.ReadCloser, error) {
 	this.mu.Lock()
 	defer this.mu.Unlock()
+	this.content[raftTermKey] = strconv.Itoa(int(this.currEntry.Term))
+	this.content[raftIndexKey] = strconv.Itoa(int(this.currEntry.Index))
+	defer func() {
+		delete(this.content, raftTermKey)
+		delete(this.content, raftIndexKey)
+	}()
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(this.content); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	return ioutil.NopCloser(&buf), nil
 }
 
-func (this *inMemKVStore) Restore(data []byte) error {
+func (this *inMemKVStore) Restore(data io.ReadCloser) error {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	content := make(map[string]interface{})
-	buf := bytes.NewBuffer(data)
-	if err := gob.NewDecoder(buf).Decode(&content); err != nil {
+	if err := gob.NewDecoder(data).Decode(&content); err != nil {
 		return err
 	} else {
+		term, _ := strconv.Atoi(content[raftTermKey].(string))
+		index, _ := strconv.Atoi(content[raftIndexKey].(string))
+		this.currEntry = db.RaftEntry{Term: uint64(term), Index: uint64(index)}
+		delete(content, raftTermKey)
+		delete(content, raftIndexKey)
 		this.content = content
 		return nil
 	}

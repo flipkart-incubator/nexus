@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"github.com/flipkart-incubator/nexus/models"
 	"time"
 
 	"github.com/flipkart-incubator/nexus/pkg/api"
@@ -41,10 +42,10 @@ func (this *NexusClient) HealthCheck() api.HealthCheckResponse_ServingStatus {
 	}
 }
 
-func (this *NexusClient) Save(data []byte) ([]byte, error) {
+func (this *NexusClient) Save(data []byte, params map[string][]byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	saveReq := &api.SaveRequest{Data: data}
+	saveReq := &api.SaveRequest{Data: data, Args: params}
 	if res, err := this.nexusCli.Save(ctx, saveReq); err != nil {
 		return nil, err
 	} else {
@@ -56,10 +57,10 @@ func (this *NexusClient) Save(data []byte) ([]byte, error) {
 	}
 }
 
-func (this *NexusClient) Load(data []byte) ([]byte, error) {
+func (this *NexusClient) Load(data []byte, params map[string][]byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	loadReq := &api.LoadRequest{Data: data}
+	loadReq := &api.LoadRequest{Data: data, Args: params}
 	if res, err := this.nexusCli.Load(ctx, loadReq); err != nil {
 		return nil, err
 	} else {
@@ -95,7 +96,7 @@ func (this *NexusClient) RemoveNode(nodeUrl string) error {
 	return nil
 }
 
-func (this *NexusClient) ListNodes() (uint64, map[uint64]string) {
+func (this *NexusClient) ListNodes() (uint64, map[uint64]*models.NodeInfo) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 	res, _ := this.nexusCli.ListNodes(ctx, &empty.Empty{})

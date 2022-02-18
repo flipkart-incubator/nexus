@@ -19,7 +19,10 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
+	"github.com/coreos/etcd/snap"
+	"github.com/flipkart-incubator/nexus/pkg/db"
 	"golang.org/x/sync/semaphore"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -38,27 +41,41 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/coreos/etcd/rafthttp"
-	"github.com/coreos/etcd/snap"
 	"github.com/coreos/etcd/wal"
 	"github.com/coreos/etcd/wal/walpb"
 )
 
 const (
 	purgeFileInterval = 30 * time.Second
+	// max number of in-flight snapshot messages nexus allows to have
+	// This number is more than enough for most clusters with 5 machines.
+	maxInFlightMsgSnap = 16
+	sendSnapTimeout    = 10 * time.Second
 )
+
+// apply contains entries, snapshot to be applied. Once
+// an apply is consumed, the entries will be persisted to
+// to raft storage concurrently; the application must read
+// raftDone before assuming the raft messages are stable.
+type apply struct {
+	data       []raftpb.Entry
+	snapshot   raftpb.Snapshot
+	applyDoneC chan struct{}
+}
 
 // A key-value stream backed by raft
 type raftNode struct {
 	readStateC chan raft.ReadState // to send out readState
-	commitC    chan *raftpb.Entry  // entries committed to log (k,v)
+	commitC    chan *apply         // entries committed to log (k,v)
 	errorC     chan error          // errors from raft session
+	msgSnapC   chan raftpb.Message // a chan to send/receive snapshot
 
 	id          uint64 // client ID for raft session
 	cid         uint64 //clusterId
 	join        bool   // node is joining an existing cluster
 	waldir      string // path to WAL directory
 	snapdir     string // path to snapshot directory
-	getSnapshot func() ([]byte, error)
+	getSnapshot func(db.SnapshotState) (io.ReadCloser, error)
 	lastIndex   uint64 // index of log at start
 
 	confState     raftpb.ConfState
@@ -92,10 +109,10 @@ type raftNode struct {
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries. To shutdown, close proposeC and read errorC.
-func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func() ([]byte, error)) *raftNode {
+func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *raftNode {
 
 	readStateC := make(chan raft.ReadState)
-	commitC := make(chan *raftpb.Entry)
+	commitC := make(chan *apply)
 	errorC := make(chan error)
 	nodeId := opts.NodeId()
 
@@ -108,7 +125,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func(
 		join:                   opts.Join(),
 		waldir:                 opts.LogDir(),
 		snapdir:                opts.SnapDir(),
-		getSnapshot:            getSnapshot,
+		getSnapshot:            store.Backup,
 		snapCount:              opts.SnapshotCount(),
 		snapshotCatchUpEntries: opts.SnapshotCatchUpEntries(),
 		stopc:                  make(chan struct{}),
@@ -118,11 +135,20 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, getSnapshot func(
 		statsCli:               statsCli,
 		maxSnapFiles:           opts.MaxSnapFiles(),
 		maxWALFiles:            opts.MaxWALFiles(),
+		msgSnapC:               make(chan raftpb.Message, maxInFlightMsgSnap),
 		snapSem:                semaphore.NewWeighted(1),
+
 		// rest of structure populated after WAL replay
 	}
 
-	rc.genClusterID()
+	if lastAppliedEntry, err := store.GetLastAppliedEntry(); err == nil {
+		rc.appliedIndex = lastAppliedEntry.Index
+	}
+
+	if rc.cid = opts.ClusterId(); rc.cid == 0 {
+		rc.genClusterID()
+	}
+
 	if rc.join {
 		rc.rpeers[nodeId] = opts.NodeUrl().String()
 	}
@@ -136,11 +162,16 @@ func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
 	walSnap := walpb.Snapshot{
 		Index: snap.Metadata.Index,
 		Term:  snap.Metadata.Term,
+		//ConfState: &snap.Metadata.ConfState,
 	}
-	if err := rc.wal.SaveSnapshot(walSnap); err != nil {
+	// save the snapshot file before writing the snapshot to the wal.
+	// This makes it possible for the snapshot file to become orphaned, but prevents
+	// a WAL snapshot entry from having no corresponding snapshot file.
+	if err := rc.snapshotter.SaveSnap(snap); err != nil {
 		return err
 	}
-	if err := rc.snapshotter.SaveSnap(snap); err != nil {
+
+	if err := rc.wal.SaveSnapshot(walSnap); err != nil {
 		return err
 	}
 	return rc.wal.ReleaseLockTo(snap.Metadata.Index)
@@ -166,7 +197,11 @@ func (rc *raftNode) getLeaderId() uint64 {
 
 // publishEntries writes committed log entries to commit channel and returns
 // whether all entries could be published.
-func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
+func (rc *raftNode) publishEntries(ents []raftpb.Entry, snap raftpb.Snapshot) (<-chan struct{}, bool) {
+	if len(ents) == 0 {
+		return nil, true
+	}
+
 	for i := range ents {
 		switch ents[i].Type {
 		case raftpb.EntryNormal: // nothing to do but leaving for clarity
@@ -184,7 +219,7 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 				if cc.NodeID == rc.id {
 					log.Printf("[Node %x] I've been removed from the cluster! Shutting down.", rc.id)
 					// TODO: In this case, check if its OK to not publish to rc.commitC
-					return false
+					return nil, false
 				}
 				if _, ok := rc.rpeers[cc.NodeID]; !ok {
 					log.Printf("[Node %x] WARNING Ignoring request to remove non-existing Node with ID: %v from the cluster.", rc.id, cc.NodeID)
@@ -194,33 +229,29 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 				}
 			}
 		}
-
-		select {
-		case rc.commitC <- &ents[i]:
-		case <-rc.stopc:
-			return false
-		}
-		// after commit, update appliedIndex
-		rc.appliedIndex = ents[i].Index
-
-		// special nil commit to signal replay has finished
-		if ents[i].Index == rc.lastIndex {
-			select {
-			case rc.commitC <- nil:
-			case <-rc.stopc:
-				return false
-			}
-		}
 	}
-	return true
+
+	applyDoneC := make(chan struct{}, 1)
+	select {
+	case rc.commitC <- &apply{data: ents, applyDoneC: applyDoneC, snapshot: snap}:
+	case <-rc.stopc:
+		return nil, false
+	}
+
+	rc.appliedIndex = ents[len(ents)-1].Index
+
+	return applyDoneC, true
 }
 
 func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
-	snapshot, err := rc.snapshotter.Load()
-	if err != nil && err != snap.ErrNoSnapshot {
-		log.Fatalf("nexus.raft: [Node %x] error loading snapshot (%v)", rc.id, err)
+	if wal.Exist(rc.waldir) {
+		snapshot, err := rc.snapshotter.Load()
+		if err != nil && err != snap.ErrNoSnapshot {
+			log.Fatalf("nexus.raft: [Node %x] error loading snapshot (%v)", rc.id, err)
+		}
+		return snapshot
 	}
-	return snapshot
+	return nil
 }
 
 // openWAL returns a WAL ready for reading.
@@ -267,12 +298,6 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 
 	// append to storage so raft starts at the right place in log
 	rc.raftStorage.Append(ents)
-	// send nil once lastIndex is published so client knows commit channel is current
-	if len(ents) > 0 {
-		rc.lastIndex = ents[len(ents)-1].Index
-	} else {
-		rc.commitC <- nil
-	}
 	return w
 }
 
@@ -326,6 +351,7 @@ func (rc *raftNode) startRaft() {
 		MaxInflightMsgs: 256,
 		ReadOnlyOption:  rc.readOption,
 		CheckQuorum:     rc.readOption == raft.ReadOnlyLeaseBased,
+		Applied:         rc.appliedIndex,
 	}
 
 	if oldwal {
@@ -345,6 +371,7 @@ func (rc *raftNode) startRaft() {
 		ServerStats: etcd_stats.NewServerStats("", ""),
 		LeaderStats: etcd_stats.NewLeaderStats(strconv.Itoa(int(rc.id))),
 		ErrorC:      make(chan error),
+		Snapshotter: rc.snapshotter,
 	}
 
 	rc.transport.Start()
@@ -377,8 +404,7 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 		return
 	}
 
-	log.Printf("nexus.raft: [Node %x] publishing snapshot at index %d", rc.id, rc.snapshotIndex)
-	defer log.Printf("nexus.raft: [Node %x] finished publishing snapshot at index %d", rc.id, rc.snapshotIndex)
+	log.Printf("nexus.raft: [Node %x] applying snapshot at index %d", rc.id, rc.appliedIndex)
 
 	if snapshotToSave.Metadata.Index <= rc.appliedIndex {
 		log.Fatalf("nexus.raft: [Node %x] snapshot index [%d] should > progress.appliedIndex [%d]", rc.id, snapshotToSave.Metadata.Index, rc.appliedIndex)
@@ -388,26 +414,38 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 	rc.confState = snapshotToSave.Metadata.ConfState
 	rc.snapshotIndex = snapshotToSave.Metadata.Index
 	rc.appliedIndex = snapshotToSave.Metadata.Index
+
+	log.Printf("nexus.raft: [Node %x] finished applying snapshot new index %d", rc.id, rc.appliedIndex)
 }
 
-func (rc *raftNode) maybeTriggerSnapshot() {
+func (rc *raftNode) maybeTriggerSnapshot(applyDoneC <-chan struct{}) {
 	if rc.appliedIndex-rc.snapshotIndex <= rc.snapCount {
 		return
 	}
+
+	// wait until all committed entries are applied (or server is closed)
+	if applyDoneC != nil {
+		select {
+		case <-applyDoneC:
+		case <-rc.stopc:
+			return
+		}
+	}
+
 	if !rc.snapSem.TryAcquire(1) {
 		return //already running
 	}
 	defer rc.snapSem.Release(1)
 
-	snapshotStartIndex := rc.appliedIndex
-	log.Printf("nexus.raft: [Node %x] start snapshot [applied index: %d | last snapshot index: %d]", rc.id, snapshotStartIndex, rc.snapshotIndex)
-	data, err := rc.getSnapshot()
-	// TODO: what should we do if the store fails to create snapshot() ?
+	appliedIndex := rc.appliedIndex
+	log.Printf("nexus.raft: [Node %x] start snapshot [applied index: %d | last snapshot index: %d]", rc.id, appliedIndex, rc.snapshotIndex)
+	data, err := rc.getSnapshot(db.SnapshotState{SnapshotIndex: rc.snapshotIndex, AppliedIndex: appliedIndex})
+
 	if err != nil {
 		log.Fatalf("nexus.raft: [Node %x] get snapshot failed with error %v", rc.id, err)
 	}
-	//TODO: `rc.appliedIndex` might have changed by now. What should we do?
-	snap, err := rc.raftStorage.CreateSnapshot(snapshotStartIndex, &rc.confState, data)
+
+	snapshot, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, nil)
 	if err != nil {
 		// the snapshot was done asynchronously with the progress of raft.
 		// raft might have already got a newer snapshot.
@@ -416,15 +454,18 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 		}
 		log.Fatalf("nexus.raft: [Node %x] create snapshot failed with error %v", rc.id, err)
 	}
+	if _, err = rc.snapshotter.SaveDBFrom(data, appliedIndex); err != nil {
+		log.Fatal(err)
+	}
 
 	log.Printf("nexus.raft: [Node %x] created snapshot [applied index: %d | last snapshot index: %d]", rc.id, snapshotStartIndex, rc.snapshotIndex)
-	if err := rc.saveSnap(snap); err != nil {
+	if err = rc.saveSnap(snapshot); err != nil {
 		log.Fatalf("nexus.raft: [Node %x] save snapshot failed with error %v", rc.id, err)
 	}
 
-	if snapshotStartIndex > rc.snapshotCatchUpEntries {
-		compactIndex := snapshotStartIndex - rc.snapshotCatchUpEntries
-		if err := rc.raftStorage.Compact(compactIndex); err != nil {
+	if appliedIndex > rc.snapshotCatchUpEntries {
+		compactIndex := appliedIndex - rc.snapshotCatchUpEntries
+		if err = rc.raftStorage.Compact(compactIndex); err != nil {
 			// the compaction was done asynchronously with the progress of raft.
 			// raft log might already been compact.
 			if err == raft.ErrCompacted {
@@ -435,7 +476,7 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 		log.Printf("nexus.raft: [Node %x] compacted log at index %d", rc.id, compactIndex)
 	}
 
-	rc.snapshotIndex = snapshotStartIndex
+	rc.snapshotIndex = appliedIndex
 }
 
 func (rc *raftNode) publishReadStates(readStates []raft.ReadState) bool {
@@ -458,7 +499,12 @@ func (rc *raftNode) serveChannels() {
 	}
 	rc.confState = snap.Metadata.ConfState
 	rc.snapshotIndex = snap.Metadata.Index
-	rc.appliedIndex = snap.Metadata.Index
+	// Set appliedIndex only if its not already initialised
+	// Note that we also set appliedIndex during init from
+	// storage supplied value.
+	if rc.appliedIndex == 0 {
+		rc.appliedIndex = snap.Metadata.Index
+	}
 
 	defer rc.wal.Close()
 
@@ -478,22 +524,31 @@ func (rc *raftNode) serveChannels() {
 				rc.stop()
 				return
 			}
-			rc.wal.Save(rd.HardState, rd.Entries)
+
+			if err = rc.wal.Save(rd.HardState, rd.Entries); err != nil {
+				log.Fatalf("nexus.raft: [Node %x] raft save state and entries error: %v", rc.id, err)
+			}
+
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				rc.saveSnap(rd.Snapshot)
 				rc.raftStorage.ApplySnapshot(rd.Snapshot)
 				rc.publishSnapshot(rd.Snapshot)
 			}
 			rc.raftStorage.Append(rd.Entries)
-			rc.transport.Send(rd.Messages)
-			if ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries)); !ok {
+			processedMsgs := rc.processMessages(rd.Messages)
+			applyDoneC, ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries), rd.Snapshot)
+			if !ok {
 				rc.stop()
 				return
 			}
-			go rc.maybeTriggerSnapshot() //this can happen completely off the raft sm.
+			//TODO: this should be moved to the applyChannel consumer.
+			// Raft thread should not be blocked for snapshots which can take long time to complete.
+			rc.maybeTriggerSnapshot(applyDoneC)
+			rc.transport.Send(processedMsgs)
+
 			rc.node.Advance()
 
-		case err := <-rc.transport.ErrorC:
+		case err = <-rc.transport.ErrorC:
 			rc.writeError(err)
 			return
 
@@ -504,13 +559,33 @@ func (rc *raftNode) serveChannels() {
 	}
 }
 
+func (r *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
+	for i := len(ms) - 1; i >= 0; i-- {
+		if r.IsIDRemoved(ms[i].To) {
+			ms[i].To = 0
+		}
+
+		if ms[i].Type == raftpb.MsgSnap {
+			// The msgSnap only contains the most recent id of store without KV.
+			// So we need to redirect the msgSnap to replicator loop for sending merged snap
+			select {
+			case r.msgSnapC <- ms[i]:
+			default:
+				// drop msgSnap if the inflight chan if full.
+			}
+			ms[i].To = 0 //don't forward this msg.
+		}
+	}
+	return ms
+}
+
 func (rc *raftNode) serveRaft() {
-	url, err := url.Parse(rc.rpeers[rc.id])
+	_url, err := url.Parse(rc.rpeers[rc.id])
 	if err != nil {
 		log.Fatalf("nexus.raft: [Node %x] Failed parsing URL (%v)", rc.id, err)
 	}
 
-	ln, err := newStoppableListener(url.Host, rc.httpstopc)
+	ln, err := newStoppableListener(_url.Host, rc.httpstopc)
 	if err != nil {
 		log.Fatalf("nexus.raft: [Node %x] Failed to listen rafthttp (%v)", rc.id, err)
 	}
@@ -527,9 +602,15 @@ func (rc *raftNode) serveRaft() {
 func (rc *raftNode) Process(ctx context.Context, m raftpb.Message) error {
 	return rc.node.Step(ctx, m)
 }
-func (rc *raftNode) IsIDRemoved(id uint64) bool                           { return false }
-func (rc *raftNode) ReportUnreachable(id uint64)                          {}
-func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {}
+func (rc *raftNode) IsIDRemoved(id uint64) bool { return false }
+
+func (rc *raftNode) ReportUnreachable(id uint64) {
+	rc.node.ReportUnreachable(id)
+}
+
+func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {
+	rc.node.ReportSnapshot(id, status)
+}
 
 type stoppableListener struct {
 	*net.TCPListener
@@ -546,10 +627,12 @@ func newStoppableListener(addr string, stopc <-chan struct{}) (*stoppableListene
 
 func (rc *raftNode) purgeFile() {
 	log.Printf("nexus.raft: [Node %x] Starting purgeFile() \n", rc.id)
-	var serrc, werrc <-chan error
+	var serrc, werrc, derrc <-chan error
 	if rc.maxSnapFiles > 0 {
 		serrc = fileutil.PurgeFile(rc.snapdir, "snap", rc.maxSnapFiles, purgeFileInterval, rc.stopc)
+		derrc = fileutil.PurgeFile(rc.snapdir, "snap.db", rc.maxSnapFiles, purgeFileInterval, rc.stopc)
 	}
+
 	if rc.maxWALFiles > 0 {
 		werrc = fileutil.PurgeFile(rc.waldir, "wal", rc.maxWALFiles, purgeFileInterval, rc.stopc)
 	}
@@ -557,6 +640,8 @@ func (rc *raftNode) purgeFile() {
 	select {
 	case e := <-serrc:
 		log.Fatalf("nexus.raft: [Node %x] failed to purge snap file %s", rc.id, e.Error())
+	case e := <-derrc:
+		log.Fatalf("nexus.raft: [Node %x] failed to purge snap.db file %s", rc.id, e.Error())
 	case e := <-werrc:
 		log.Fatalf("nexus.raft: [Node %x] failed to purge wal file %s", rc.id, e.Error())
 	case <-rc.stopc:
