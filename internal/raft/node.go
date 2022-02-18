@@ -49,7 +49,7 @@ const (
 	// max number of in-flight snapshot messages nexus allows to have
 	// This number is more than enough for most clusters with 5 machines.
 	maxInFlightMsgSnap = 16
-	sendSnapTimeout   = 10 * time.Second
+	sendSnapTimeout    = 10 * time.Second
 )
 
 // apply contains entries, snapshot to be applied. Once
