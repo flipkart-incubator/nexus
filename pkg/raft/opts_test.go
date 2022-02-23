@@ -68,7 +68,7 @@ func TestDiscoverAddr(t *testing.T) {
 	}
 }
 
-func TestClusterId(t *testing.T){
+func TestClusterId(t *testing.T) {
 	if opts, err := NewOptions(ClusterUrl("http://127.0.0.1:9090,http://site2:9090,http://site3:9090"), NodeUrl("")); err != nil {
 		t.Errorf("Expected no error but got: %v", err)
 	} else {

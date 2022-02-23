@@ -8,13 +8,15 @@ import (
 	"github.com/golang/protobuf/proto"
 	"log"
 	"net"
+	"os"
+	"path"
 	"sync/atomic"
 	"time"
 
 	"github.com/coreos/etcd/pkg/idutil"
 	"github.com/coreos/etcd/pkg/wait"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/flipkart-incubator/nexus/internal/raft/snap"
+	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	"github.com/flipkart-incubator/nexus/models"
 	"github.com/flipkart-incubator/nexus/pkg/db"
@@ -71,9 +73,11 @@ func (this *replicator) Id() uint64 {
 }
 
 func (this *replicator) Start() {
+	this.node.startRaft()
+	this.restoreFromSnapshot()
+	go this.sendSnapshots()
 	go this.readCommits()
 	go this.readReadStates()
-	this.node.startRaft()
 	go this.node.purgeFile()
 }
 
@@ -123,7 +127,7 @@ func (this *replicator) Save(ctx context.Context, data []byte) ([]byte, error) {
 		ch := this.waiter.Register(repl_req.ID)
 		child_ctx, cancel := context.WithTimeout(ctx, this.opts.ReplTimeout())
 		defer cancel()
-		if err := this.node.node.Propose(child_ctx, repl_req_data); err != nil {
+		if err = this.node.node.Propose(child_ctx, repl_req_data); err != nil {
 			log.Printf("[WARN] [Node %x] Error while proposing to Raft. Message: %v.", this.node.id, err)
 			this.waiter.Trigger(repl_req.ID, &internalNexusResponse{Err: err})
 			this.statsCli.Incr("raft.propose.error", 1)
@@ -185,7 +189,7 @@ func (this *replicator) AddMember(ctx context.Context, nodeUrl string) error {
 		return err
 	}
 	nodeAddr := nodeOpts.NodeUrl()
-	if _, err := net.Dial("tcp", nodeAddr.Host); err != nil {
+	if _, err = net.Dial("tcp", nodeAddr.Host); err != nil {
 		return fmt.Errorf("unable to verify RAFT service running at %s, error: %v", nodeAddr, err)
 	}
 	cc := raftpb.ConfChange{
@@ -237,23 +241,44 @@ func (this *replicator) proposeConfigChange(ctx context.Context, confChange raft
 	}
 }
 
+func (this *replicator) restoreFromSnapshot() {
+	snapshot, err := this.node.snapshotter.Load()
+	if err == snap.ErrNoSnapshot {
+		log.Printf("[Node %x] WARNING - Received no snapshot error", this.node.id)
+		return
+	}
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Printf("[Node %x] Loading snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
+
+	//readId file from snapPayload
+	dbFile, err := this.node.snapshotter.DBFilePath(snapshot.Metadata.Index)
+	if err != nil {
+		log.Printf("[Node %x] Failed to load db file for snapshot index %d", this.node.id, snapshot.Metadata.Index)
+		return
+	}
+
+	reader, err := os.Open(dbFile)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	if err = this.store.Restore(reader); err != nil {
+		log.Panic(err)
+	}
+	log.Printf("[Node %x] Restored snapshot at term %d and index %d", this.node.id, snapshot.Metadata.Term, snapshot.Metadata.Index)
+}
+
 func (this *replicator) readCommits() {
-	for entry := range this.node.commitC {
-		if entry == nil {
+	for _commit := range this.node.commitC {
+		if _commit == nil {
 			log.Printf("[Node %x] Received a message in the commit channel with no data", this.node.id)
-			data, err := this.node.snapshotter.LoadDBSnapshot()
-			if err == snap.ErrNoSnapshot {
-				log.Printf("[Node %x] WARNING - Received no snapshot error", this.node.id)
-				continue
-			}
-			if err != nil {
-				log.Panic(err)
-			}
-			log.Printf("[Node %x] Loaded DB snapshot", this.node.id)
-			if err := this.store.Restore(data); err != nil {
-				log.Panic(err)
-			}
-		} else {
+			this.restoreFromSnapshot()
+			continue
+		}
+
+		for _, entry := range _commit.data {
 			if len(entry.Data) > 0 {
 				switch entry.Type {
 				case raftpb.EntryNormal:
@@ -275,13 +300,78 @@ func (this *replicator) readCommits() {
 					}
 				}
 			}
+			// after commit, update appliedIndex
+			//this.node.appliedIndex = entry.Index //some issue.
+
 			// signal any linearizable reads blocked for this index
 			this.applyWait.Trigger(entry.Index)
 		}
+		close(_commit.applyDoneC)
 	}
+
 	if err, present := <-this.node.errorC; present {
 		log.Fatal(err)
 	}
+}
+
+func (this *replicator) sendSnapshots() error {
+	for {
+		select {
+		case m := <-this.node.msgSnapC:
+			log.Printf("nexus.raft: [Node %x] Request to send snapshot to  %d at Term %d, Index %d \n", this.node.id, m.To, m.Term, m.Index)
+			currentSnap, err := this.node.snapshotter.Load()
+			if err != nil {
+				return err
+			}
+
+			// put the []byte snapshot of store into raft snapshot and
+			// return the merged snapshot with KV readCloser snapshot.
+			snapshot := raftpb.Snapshot{
+				Metadata: currentSnap.Metadata,
+				Data:     nil,
+			}
+			m.Snapshot = snapshot
+
+			//file data
+			dbFile, err := this.node.snapshotter.DBFilePath(currentSnap.Metadata.Index)
+			if err != nil {
+				return err
+			}
+			rc, err := os.Open(dbFile)
+			if err != nil {
+				return err
+			}
+			stat, _ := rc.Stat()
+			mergedSnap := *snap.NewMessage(m, rc, stat.Size())
+
+			log.Printf("nexus.raft: [Node %x] Sending snap(T%d)+db(%s) snapshot to  %x \n", this.node.id, snapshot.Metadata.Index, path.Base(dbFile), m.To)
+
+			//atomic.AddInt64(&s.inflightSnapshots, 1)
+			this.node.transport.SendSnapshot(mergedSnap)
+			//go func() {
+			//	select {
+			//	case ok := <-merged.CloseNotify():
+			//		// delay releasing inflight snapshot for another 30 seconds to
+			//		// block log compaction.
+			//		// If the follower still fails to catch up, it is probably just too slow
+			//		// to catch up. We cannot avoid the snapshot cycle anyway.
+			//		if ok {
+			//			select {
+			//			case <-time.After(releaseDelayAfterSnapshot):
+			//			case <-s.stopping:
+			//			}
+			//		}
+			//		atomic.AddInt64(&s.inflightSnapshots, -1)
+			//	case <-s.stopping:
+			//		return
+			//	}
+			//}()
+			//default:
+			// No pending snapshot request
+		}
+	}
+
+	return nil
 }
 
 func (this *replicator) readReadStates() {
