@@ -4,12 +4,13 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
-	"flag"
 	"fmt"
 	"net"
 	"net/url"
 	"strings"
 	"time"
+
+	flag "github.com/spf13/pflag"
 
 	"github.com/coreos/etcd/raft"
 )

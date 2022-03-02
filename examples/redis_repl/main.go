@@ -1,12 +1,13 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+
+	flag "github.com/spf13/pflag"
 
 	"github.com/flipkart-incubator/nexus/examples/redis_repl/store"
 	"github.com/flipkart-incubator/nexus/internal/grpc"
