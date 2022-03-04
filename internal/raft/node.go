@@ -19,8 +19,6 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
-	"github.com/coreos/etcd/snap"
-	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
 	"log"
 	"net"
@@ -30,6 +28,9 @@ import (
 	"sort"
 	"strconv"
 	"time"
+
+	"github.com/coreos/etcd/snap"
+	"github.com/flipkart-incubator/nexus/pkg/db"
 
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
@@ -435,6 +436,7 @@ func (rc *raftNode) maybeTriggerSnapshot(applyDoneC <-chan struct{}) {
 	if err != nil {
 		log.Panic(err)
 	}
+	defer data.Close()
 
 	snapshot, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, nil)
 	if err != nil {
