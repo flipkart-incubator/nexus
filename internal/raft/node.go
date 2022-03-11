@@ -446,6 +446,13 @@ func (rc *raftNode) maybeTriggerSnapshot(applyDoneC <-chan struct{}) {
 }
 
 func (rc *raftNode) triggerSnapshot() {
+
+	//re-check since a previous snapshot may just have got completd and the semaphore was just released.
+	if rc.appliedIndex-rc.snapshotIndex <= rc.snapCount {
+		log.Printf("nexus.raft: [Node %x] skipped snapshot [applied index: %d | last snapshot index: %d]", rc.id, rc.appliedIndex, rc.snapshotIndex)
+		return
+	}
+
 	appliedIndex := rc.appliedIndex
 	log.Printf("nexus.raft: [Node %x] start snapshot [applied index: %d | last snapshot index: %d]", rc.id, appliedIndex, rc.snapshotIndex)
 	data, err := rc.getSnapshot(db.SnapshotState{SnapshotIndex: rc.snapshotIndex, AppliedIndex: appliedIndex})
