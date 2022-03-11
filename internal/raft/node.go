@@ -424,6 +424,8 @@ func (rc *raftNode) maybeTriggerSnapshot(applyDoneC <-chan struct{}) {
 		return
 	}
 
+	//TODO: create a quick copy of the kvstore and pass it to goroutine.
+
 	//async snapshot. Release raft routine
 	go func() {
 
@@ -454,7 +456,7 @@ func (rc *raftNode) triggerSnapshot() {
 	}
 
 	appliedIndex := rc.appliedIndex
-	log.Printf("nexus.raft: [Node %x] start snapshot [applied index: %d | last snapshot index: %d]", rc.id, appliedIndex, rc.snapshotIndex)
+	log.Printf("nexus.raft: [Node %x] start snapshot async [applied index: %d | last snapshot index: %d]", rc.id, appliedIndex, rc.snapshotIndex)
 	data, err := rc.getSnapshot(db.SnapshotState{SnapshotIndex: rc.snapshotIndex, AppliedIndex: appliedIndex})
 	if err != nil {
 		log.Fatalf("nexus.raft: [Node %x] get snapshot failed with error %v", rc.id, err)
