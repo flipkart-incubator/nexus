@@ -31,6 +31,7 @@ import (
 
 	"github.com/coreos/etcd/snap"
 	"github.com/flipkart-incubator/nexus/pkg/db"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	pkg_raft "github.com/flipkart-incubator/nexus/pkg/raft"
@@ -96,6 +97,7 @@ type raftNode struct {
 	readOption raft.ReadOnlyOption
 	statsCli   stats.Client
 	rpeers     map[uint64]string
+	snapSem    *semaphore.Weighted
 
 	snapCount              uint64
 	snapshotCatchUpEntries uint64
@@ -135,6 +137,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *
 		maxSnapFiles:           opts.MaxSnapFiles(),
 		maxWALFiles:            opts.MaxWALFiles(),
 		msgSnapC:               make(chan raftpb.Message, maxInFlightMsgSnap),
+		snapSem:                semaphore.NewWeighted(1),
 
 		// rest of structure populated after WAL replay
 	}
@@ -421,39 +424,72 @@ func (rc *raftNode) maybeTriggerSnapshot(applyDoneC <-chan struct{}) {
 		return
 	}
 
-	// wait until all committed entries are applied (or server is closed)
-	if applyDoneC != nil {
-		select {
-		case <-applyDoneC:
-		case <-rc.stopc:
-			return
+	//TODO: create a quick copy of the kvstore and pass it to goroutine.
+
+	//async snapshot. Release raft routine
+	go func() {
+
+		// wait until all committed entries are applied (or server is closed)
+		if applyDoneC != nil {
+			select {
+			case <-applyDoneC:
+			case <-rc.stopc:
+				return
+			}
 		}
+
+		if !rc.snapSem.TryAcquire(1) {
+			return //already running
+		}
+		rc.triggerSnapshot()
+		rc.snapSem.Release(1)
+
+	}()
+}
+
+func (rc *raftNode) triggerSnapshot() {
+
+	//re-check since a previous snapshot may just have got completd and the semaphore was just released.
+	if rc.appliedIndex-rc.snapshotIndex <= rc.snapCount {
+		log.Printf("nexus.raft: [Node %x] skipped snapshot [applied index: %d | last snapshot index: %d]", rc.id, rc.appliedIndex, rc.snapshotIndex)
+		return
 	}
 
 	appliedIndex := rc.appliedIndex
-	log.Printf("nexus.raft: [Node %x] start snapshot [applied index: %d | last snapshot index: %d]", rc.id, appliedIndex, rc.snapshotIndex)
+	log.Printf("nexus.raft: [Node %x] start snapshot async [applied index: %d | last snapshot index: %d]", rc.id, appliedIndex, rc.snapshotIndex)
 	data, err := rc.getSnapshot(db.SnapshotState{SnapshotIndex: rc.snapshotIndex, AppliedIndex: appliedIndex})
 	if err != nil {
-		log.Panic(err)
+		log.Fatalf("nexus.raft: [Node %x] get snapshot failed with error %v", rc.id, err)
 	}
 	defer data.Close()
 
 	snapshot, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, nil)
 	if err != nil {
-		log.Fatal(err)
+		// the snapshot was done asynchronously with the progress of raft.
+		// raft might have already got a newer snapshot.
+		if err == raft.ErrSnapOutOfDate {
+			return
+		}
+		log.Fatalf("nexus.raft: [Node %x] create snapshot failed with error %v", rc.id, err)
 	}
 	if _, err = rc.snapshotter.SaveDBFrom(data, appliedIndex); err != nil {
 		log.Fatal(err)
 	}
 
+	log.Printf("nexus.raft: [Node %x] created snapshot [applied index: %d | last snapshot index: %d]", rc.id, appliedIndex, rc.snapshotIndex)
 	if err = rc.saveSnap(snapshot); err != nil {
-		log.Fatal(err)
+		log.Fatalf("nexus.raft: [Node %x] save snapshot failed with error %v", rc.id, err)
 	}
 
 	if appliedIndex > rc.snapshotCatchUpEntries {
 		compactIndex := appliedIndex - rc.snapshotCatchUpEntries
 		if err = rc.raftStorage.Compact(compactIndex); err != nil {
-			log.Fatal(err)
+			// the compaction was done asynchronously with the progress of raft.
+			// raft log might already been compact.
+			if err == raft.ErrCompacted {
+				return
+			}
+			log.Fatalf("nexus.raft: [Node %x] compaction failed with error %v", rc.id, err)
 		}
 		log.Printf("nexus.raft: [Node %x] compacted log at index %d", rc.id, compactIndex)
 	}
