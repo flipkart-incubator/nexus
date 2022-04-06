@@ -15,8 +15,10 @@ require (
 	github.com/onsi/gomega v1.9.0 // indirect
 	github.com/prometheus/client_golang v1.2.1 // indirect
 	github.com/smira/go-statsd v1.3.1
+	github.com/spf13/pflag v1.0.5
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	go.uber.org/zap v1.13.0 // indirect
+	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 	google.golang.org/grpc v1.33.2
 	google.golang.org/protobuf v1.27.1
