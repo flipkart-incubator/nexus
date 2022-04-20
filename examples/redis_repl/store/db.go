@@ -80,8 +80,8 @@ func (this *redisStore) Load(data []byte) ([]byte, error) {
 
 	luaSnippet := string(req.Data)
 	luaScript := fmt.Sprintf(LoadLUAScript,
-		userDB,			/* switch to user DB */
-		luaSnippet)		/* user supplied Lua snippet */
+		userDB,     /* switch to user DB */
+		luaSnippet) /* user supplied Lua snippet */
 	return this.evalLua(luaScript)
 }
 
@@ -101,11 +101,11 @@ func (this *redisStore) Save(raftState db.RaftEntry, data []byte) ([]byte, error
 
 	luaSnippet := string(req.Data)
 	luaScript := fmt.Sprintf(SaveLUAScript,
-		this.metaDB,										/* switch to metadata DB */
-		RaftStateKey, RaftStateTermKey, raftState.Term,		/* insert RAFT state term */
-		RaftStateKey, RaftStateIndexKey, raftState.Index,	/* insert RAFT state index */
-		userDB,												/* switch to user DB */
-		luaSnippet)											/* user supplied Lua snippet */
+		this.metaDB,                                    /* switch to metadata DB */
+		RaftStateKey, RaftStateTermKey, raftState.Term, /* insert RAFT state term */
+		RaftStateKey, RaftStateIndexKey, raftState.Index, /* insert RAFT state index */
+		userDB,     /* switch to user DB */
+		luaSnippet) /* user supplied Lua snippet */
 	return this.evalLua(luaScript)
 }
 

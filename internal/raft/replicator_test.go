@@ -58,11 +58,11 @@ func testListMembers(t *testing.T) {
 
 func testSaveLoadReallyLargeData(t *testing.T) {
 	var reqs []*kvReq
-	iterations := 125
+	iterations := 50
 	// Saving
 	writePeer := clus.peers[0]
 	runId := writePeer.id
-	token := make([]byte, 1024*1024) //1mb
+	token := make([]byte, 1024*1024*2) //1mb
 	rand.Read(token)
 
 	for i := 0; i < iterations; i++ {
@@ -77,7 +77,7 @@ func testSaveLoadReallyLargeData(t *testing.T) {
 
 	//Read
 	for i := 0; i < iterations; i++ {
-		req1 := &kvReq{fmt.Sprintf("Key:KL%d#%d", runId, i), fmt.Sprintf("Val:%d#%d$%s", runId, i,token)}
+		req1 := &kvReq{fmt.Sprintf("Key:KL%d#%d", runId, i), fmt.Sprintf("Val:%d#%d$%s", runId, i, token)}
 		actVal := writePeer.load(t, req1).(string)
 		if req1.Val != actVal {
 			t.Errorf("Value mismatch for peer: %d. Key: %s, Expected Value: %s, Actual Value: %s", writePeer.id, req1.Key, req1.Val, actVal)
@@ -208,7 +208,7 @@ func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 		peer1 := clus.peers[0]
 
 		// add peer to existing cluster
-		if err := peer1.repl.AddMember(context.Background(), peer4Url); err != nil {
+		if err = peer1.repl.AddMember(context.Background(), peer4Url); err != nil {
 			t.Fatal(err)
 		}
 		sleep(3)
@@ -225,8 +225,8 @@ func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 		// assert membership across all nodes
 		peer4.assertMembers(t, peer4.getLeaderUrl(), members)
 
-		// remove this peer
-		if err := peer1.repl.RemoveMember(context.Background(), peer4Url); err != nil {
+		//// remove this peer
+		if err = peer1.repl.RemoveMember(context.Background(), peer4Url); err != nil {
 			t.Fatal(err)
 		}
 		sleep(3)

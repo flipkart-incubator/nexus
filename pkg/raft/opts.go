@@ -4,12 +4,13 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
-	"flag"
 	"fmt"
 	"net"
 	"net/url"
 	"strings"
 	"time"
+
+	flag "github.com/spf13/pflag"
 
 	"github.com/coreos/etcd/raft"
 )
@@ -131,11 +132,11 @@ func (this *options) Join() bool {
 }
 
 func (this *options) LogDir() string {
-	return fmt.Sprintf("%s/node_%d", this.logDir, this.NodeId())
+	return fmt.Sprintf("%s/node_%x", this.logDir, this.NodeId())
 }
 
 func (this *options) SnapDir() string {
-	return fmt.Sprintf("%s/node_%d", this.snapDir, this.NodeId())
+	return fmt.Sprintf("%s/node_%x", this.snapDir, this.NodeId())
 }
 
 func (this *options) ClusterUrls() map[uint64]string {
@@ -294,18 +295,30 @@ func StatsDAddr(statsdAddr string) Option {
 }
 
 func (this *options) MaxSnapFiles() uint {
+	if this.maxSnapFiles == 0 {
+		return defaultMaxSNAP
+	}
 	return uint(this.maxSnapFiles)
 }
 
 func (this *options) MaxWALFiles() uint {
+	if this.maxWALFiles == 0 {
+		return defaultMaxWAL
+	}
 	return uint(this.maxWALFiles)
 }
 
 func (this *options) SnapshotCount() uint64 {
+	if this.snapshotCount == 0 {
+		return uint64(defaultSnapshotCount)
+	}
 	return uint64(this.snapshotCount)
 }
 
 func (this *options) SnapshotCatchUpEntries() uint64 {
+	if this.snapshotCatchUpEntries == 0 {
+		return uint64(defaultSnapshotCatchUpEntries)
+	}
 	return uint64(this.snapshotCatchUpEntries)
 }
 
