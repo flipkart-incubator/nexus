@@ -30,7 +30,6 @@ const (
 	clusterUrl  = "http://127.0.0.1:9321,http://127.0.0.1:9322,http://127.0.0.1:9323"
 	peer4Url    = "http://127.0.0.1:9324"
 	peer5Url    = "http://127.0.0.1:9325"
-	peer6Url    = "http://127.0.0.1:9326"
 	replTimeout = 3 * time.Second
 )
 
@@ -49,7 +48,6 @@ func TestReplicator(t *testing.T) {
 	t.Run("testSaveLoadReallyLargeData", testSaveLoadReallyLargeData)
 	t.Run("testForNewNexusNodeJoinHighDataClusterDataMismatch", testForNewNexusNodeJoinHighDataClusterDataMismatch)
 	t.Run("testForNodeRestart", testForNodeRestart)
-	t.Run("testForNewNexusNodeLeaveJoinCluster", testForNewNexusNodeLeaveJoinCluster)
 }
 
 func testListMembers(t *testing.T) {
@@ -210,7 +208,7 @@ func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 		peer1 := clus.peers[0]
 
 		// add peer to existing cluster
-		if err = peer1.repl.AddMember(context.Background(), peer4Url, peer4Url); err != nil {
+		if err = peer1.repl.AddMember(context.Background(), peer4Url); err != nil {
 			t.Fatal(err)
 		}
 		sleep(3)
@@ -228,84 +226,14 @@ func testForNewNexusNodeJoinLeaveCluster(t *testing.T) {
 		peer4.assertMembers(t, peer4.getLeaderUrl(), members)
 
 		//// remove this peer
-		if err = peer1.repl.RemoveMember(context.Background(), peer4.id); err != nil {
+		if err = peer1.repl.RemoveMember(context.Background(), peer4Url); err != nil {
 			t.Fatal(err)
 		}
 		sleep(3)
 
 		// assert membership across all nodes
 		clus.assertMembers(t, members[0:len(members)-1])
-
-	}
-}
-
-func testForNewNexusNodeLeaveJoinCluster(t *testing.T) {
-	// create a new peer
-	peer1 := clus.peers[0]
-	members := strings.Split(clusterUrl, ",")
-	members = append(members, peer6Url)
-
-	if peer6, err := newJoiningPeer(peer6Url); err != nil {
-		t.Fatal(err)
-	} else {
-		// start the peer
-		peer6.start()
-		sleep(3)
-
-		// add peer to existing cluster
-		if err = peer1.repl.AddMember(context.Background(), peer6Url, peer6Url); err != nil {
-			t.Fatal(err)
-		}
-		sleep(3)
-		clus.assertMembers(t, members)
-
-		// insert data
-		db4, db1 := peer6.db.content, peer1.db.content
-		if !reflect.DeepEqual(db4, db1) {
-			t.Errorf("DB Mismatch !!! Expected: %v, Actual: %v", db4, db1)
-		}
-
-		// assert membership across all nodes
-		peer6.assertMembers(t, peer6.getLeaderUrl(), members)
-
-		//// remove this peer
-		if err = peer1.repl.RemoveMember(context.Background(), peer6.id); err != nil {
-			t.Fatal(err)
-		}
-		sleep(3)
-
-		// assert membership across all nodes
-		clus.assertMembers(t, members[0:len(members)-1])
-		peer6.stop()
-		sleep(15)
-		t.Logf("Shuttting down Peer")
-		peer6.reset()
-	}
-
-	//rejoin the node
-	if peer6_relaunch, err := newJoiningPeer(peer6Url); err != nil {
-		t.Fatal(err)
-	} else {
-
-		peer6_relaunch.start()
-		sleep(3)
-
-		// add peer to existing cluster
-		if err = peer1.repl.AddMember(context.Background(), peer6Url, peer6Url); err != nil {
-			t.Fatal(err)
-		}
-		sleep(5)
-
-		clus.assertMembers(t, members)
-
-		// insert data
-		db4, db1 := peer6_relaunch.db.content, peer1.db.content
-		if !reflect.DeepEqual(db4, db1) {
-			t.Errorf("DB Mismatch !!! Expected: %v, Actual: %v", db4, db1)
-		}
-
-		peer6_relaunch.stop()
-
+		peer4.stop()
 	}
 }
 
@@ -320,7 +248,7 @@ func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
 		peer1 := clus.peers[0]
 
 		// add peer to existing cluster
-		if err = peer1.repl.AddMember(context.Background(), peer5Url, peer5Url); err != nil {
+		if err = peer1.repl.AddMember(context.Background(), peer5Url); err != nil {
 			t.Fatal(err)
 		}
 		sleep(30)
@@ -350,7 +278,7 @@ func testForNewNexusNodeJoinHighDataClusterDataMismatch(t *testing.T) {
 		peer5.assertMembers(t, peer5.getLeaderUrl(), members)
 
 		// remove this peer
-		if err = peer1.repl.RemoveMember(context.Background(), peer5.id); err != nil {
+		if err = peer1.repl.RemoveMember(context.Background(), peer5Url); err != nil {
 			t.Fatal(err)
 		}
 		sleep(3)
@@ -564,11 +492,6 @@ func newJoiningPeer(peerAddr string) (*peer, error) {
 		repl := NewReplicator(memKVStore, opts)
 		return &peer{repl.node.id, memKVStore, repl}, nil
 	}
-}
-
-func (this *peer) reset() {
-	os.Remove(this.repl.opts.LogDir())
-	os.Remove(this.repl.opts.SnapDir())
 }
 
 func (this *peer) getLeaderUrl() string {

@@ -15,8 +15,8 @@ type RaftReplicator interface {
 	Id() uint64
 	Save(context.Context, []byte) ([]byte, error)
 	Load(context.Context, []byte) ([]byte, error)
-	AddMember(context.Context, string, string) error
-	RemoveMember(context.Context, uint64) error
+	AddMember(context.Context, string) error
+	RemoveMember(context.Context, string) error
 	ListMembers() (uint64, map[uint64]*models.NodeInfo)
 	Stop()
 }

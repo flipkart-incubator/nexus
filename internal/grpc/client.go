@@ -72,10 +72,10 @@ func (this *NexusClient) Load(data []byte, params map[string][]byte) ([]byte, er
 	}
 }
 
-func (this *NexusClient) AddNode(nodeName, nodeUrl string) error {
+func (this *NexusClient) AddNode(nodeUrl string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	req := &api.AddNodeRequest{NodeUrl: nodeUrl, NodeName: nodeName}
+	req := &api.AddNodeRequest{NodeUrl: nodeUrl}
 	if res, err := this.nexusCli.AddNode(ctx, req); err != nil {
 		return err
 	} else if res.Code != 0 {
@@ -84,10 +84,10 @@ func (this *NexusClient) AddNode(nodeName, nodeUrl string) error {
 	return nil
 }
 
-func (this *NexusClient) RemoveNode(nodeId uint64) error {
+func (this *NexusClient) RemoveNode(nodeUrl string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	req := &api.RemoveNodeRequest{NodeId: nodeId}
+	req := &api.RemoveNodeRequest{NodeUrl: nodeUrl}
 	if res, err := this.nexusCli.RemoveNode(ctx, req); err != nil {
 		return err
 	} else if res.Code != 0 {

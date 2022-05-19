@@ -51,7 +51,6 @@ type Options interface {
 type options struct {
 	nodeUrl                *url.URL
 	nodeUrlStr             string
-	nodeName               string
 	logDir                 string
 	snapDir                string
 	clusterUrl             string
@@ -82,7 +81,6 @@ func init() {
 	flag.BoolVar(&opts.leaseBasedReads, "nexus-lease-based-reads", true, "Perform reads using RAFT leader leases")
 	flag.StringVar(&opts.statsdAddr, "nexus-statsd-addr", "", "StatsD server address (host:port) for relaying various metrics")
 	flag.StringVar(&opts.nodeState, "nexus-node-state", "existing", "Start existing node or create a new one")
-	flag.StringVar(&opts.nodeName, "nexus-node-name", "", "Node Name")
 
 	flag.IntVar(&opts.maxSnapFiles, "nexus-max-snapshots", defaultMaxSNAP, "Maximum number of snapshot files to retain (0 is unlimited)")
 	flag.IntVar(&opts.maxWALFiles, "nexus-max-wals", defaultMaxWAL, "Maximum number of wal files to retain (0 is unlimited)")
@@ -104,7 +102,6 @@ func OptionsFromFlags() []Option {
 		SnapshotCount(opts.snapshotCount),
 		SnapshotCatchUpEntries(opts.snapshotCatchUpEntries),
 		ClusterName(opts.clusterName),
-		NodeName(opts.nodeName),
 	}
 }
 
@@ -119,13 +116,7 @@ func NewOptions(opts ...Option) (Options, error) {
 }
 
 func (this *options) NodeId() uint64 {
-	var b []byte
-	//b = append(b, []byte(this.clusterName)...)
-	b = append(b, []byte(this.nodeUrl.Host)...)
-	b = append(b, []byte(this.nodeName)...)
-	hash := sha1.Sum(b)
-	return binary.BigEndian.Uint64(hash[:8])
-	//return this.hash(this.nodeUrl.Host)
+	return this.hash(this.nodeUrl.Host)
 }
 
 func (this *options) hash(url string) uint64 {
@@ -387,13 +378,6 @@ func (this *options) ClusterId() uint64 {
 func ClusterName(name string) Option {
 	return func(opts *options) error {
 		opts.clusterName = name
-		return nil
-	}
-}
-
-func NodeName(name string) Option {
-	return func(opts *options) error {
-		opts.nodeName = name
 		return nil
 	}
 }

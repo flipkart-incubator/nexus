@@ -34,12 +34,12 @@ message LoadResponse {
 
 message AddNodeRequest {
   string nodeUrl = 1;
-  string nodeName = 2;
 }
 
 message RemoveNodeRequest {
-  uint64 nodeId = 1;
+  string nodeUrl = 1;
 }
+
 
 message ListNodesResponse {
   Status status = 1;

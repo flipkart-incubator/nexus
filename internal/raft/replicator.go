@@ -183,8 +183,8 @@ func (this *replicator) Load(ctx context.Context, data []byte) ([]byte, error) {
 	}
 }
 
-func (this *replicator) AddMember(ctx context.Context, nodeName string, nodeUrl string) error {
-	nodeOpts, err := pkg_raft.NewOptions(pkg_raft.NodeUrl(nodeUrl), pkg_raft.NodeName(nodeName))
+func (this *replicator) AddMember(ctx context.Context, nodeUrl string) error {
+	nodeOpts, err := pkg_raft.NewOptions(pkg_raft.NodeUrl(nodeUrl))
 	if err != nil {
 		return err
 	}
@@ -200,8 +200,12 @@ func (this *replicator) AddMember(ctx context.Context, nodeName string, nodeUrl 
 	return this.proposeConfigChange(ctx, cc)
 }
 
-func (this *replicator) RemoveMember(ctx context.Context, nodeId uint64) error {
-	cc := raftpb.ConfChange{Type: raftpb.ConfChangeRemoveNode, NodeID: nodeId}
+func (this *replicator) RemoveMember(ctx context.Context, nodeUrl string) error {
+	nodeOpts, err := pkg_raft.NewOptions(pkg_raft.NodeUrl(nodeUrl))
+	if err != nil {
+		return err
+	}
+	cc := raftpb.ConfChange{Type: raftpb.ConfChangeRemoveNode, NodeID: nodeOpts.NodeId()}
 	return this.proposeConfigChange(ctx, cc)
 }
 

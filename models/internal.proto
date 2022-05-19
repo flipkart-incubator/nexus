@@ -19,5 +19,4 @@ message NodeInfo {
   string nodeUrl = 1;
   uint64 nodeId = 2;
   NodeStatus status = 3;
-  string nodeName = 4;
 }
