@@ -74,14 +74,14 @@ func (this *NexusService) Load(ctx context.Context, req *api.LoadRequest) (*api.
 }
 
 func (this *NexusService) AddNode(ctx context.Context, req *api.AddNodeRequest) (*api.Status, error) {
-	if err := this.repl.AddMember(ctx, req.NodeUrl); err != nil {
+	if err := this.repl.AddMember(ctx, req.NodeName, req.NodeUrl); err != nil {
 		return &api.Status{Code: -1, Message: err.Error()}, err
 	}
 	return &api.Status{}, nil
 }
 
 func (this *NexusService) RemoveNode(ctx context.Context, req *api.RemoveNodeRequest) (*api.Status, error) {
-	if err := this.repl.RemoveMember(ctx, req.NodeUrl); err != nil {
+	if err := this.repl.RemoveMember(ctx, req.NodeId); err != nil {
 		return &api.Status{Code: -1, Message: err.Error()}, err
 	}
 	return &api.Status{}, nil

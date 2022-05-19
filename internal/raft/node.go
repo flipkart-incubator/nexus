@@ -512,17 +512,17 @@ func (rc *raftNode) publishReadStates(readStates []raft.ReadState) bool {
 }
 
 func (rc *raftNode) serveChannels() {
-	snap, err := rc.raftStorage.Snapshot()
+	snapshot, err := rc.raftStorage.Snapshot()
 	if err != nil {
 		panic(err)
 	}
-	rc.confState = snap.Metadata.ConfState
-	rc.snapshotIndex = snap.Metadata.Index
+	rc.confState = snapshot.Metadata.ConfState
+	rc.snapshotIndex = snapshot.Metadata.Index
 	// Set appliedIndex only if its not already initialised
 	// Note that we also set appliedIndex during init from
 	// storage supplied value.
 	if rc.appliedIndex == 0 {
-		rc.appliedIndex = snap.Metadata.Index
+		rc.appliedIndex = snapshot.Metadata.Index
 	}
 
 	defer rc.wal.Close()
@@ -557,10 +557,8 @@ func (rc *raftNode) serveChannels() {
 			processedMsgs := rc.processMessages(rd.Messages)
 			applyDoneC, ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries), rd.Snapshot)
 			if !ok {
-				log.Printf("nexus.raft: [Node %x] Got Removed from Cluster, Maynot get any more messages. \n", rc.id)
-				// Don't shutdown from here.
-				// rc.stop()
-				// return
+				rc.stop()
+				return
 			}
 			//TODO: this should be moved to the applyChannel consumer.
 			// Raft thread should not be blocked for snapshots which can take long time to complete.
