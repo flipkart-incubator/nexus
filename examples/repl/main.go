@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	str "strings"
 
@@ -16,8 +17,8 @@ func printUsage() {
 	fmt.Printf("Usage: %s <nexus_url> <command> [<options>]\n"+
 		"Following commands are supported:\n"+
 		"listNodes\n"+
-		"addNode <nodeAddr>\n"+
-		"removeNode <nodeAddr>\n"+
+		"addNode <nodename> <nodeAddr>\n"+
+		"removeNode <nodeId>\n"+
 		"mysql load <expression>\n"+
 		"mysql save <expression>\n"+
 		"redis load db.index=<num> <expression>\n"+
@@ -149,21 +150,22 @@ func listNodesUsingCli(nc *grpc.NexusClient) {
 		fmt.Println("Current cluster members:")
 	}
 	for _, id := range ids {
-		fmt.Printf("%x => %s (%s) \n", id, members[id].NodeUrl, members[id].Status)
+		fmt.Printf("%s [%x] => %s (%s) \n", members[id].NodeName, id, members[id].NodeUrl, members[id].Status)
 	}
 }
 
 func addNode(nexus_url string, args []string) {
-	if len(args) < 1 {
-		fmt.Println("Error: <nodeAddr> must be provided")
+	if len(args) < 2 {
+		fmt.Println("Error: <nodeName> <nodeAddr> must be provided")
 		printUsage()
 		return
 	}
-	node_addr := strings.TrimSpace(args[0])
+	nodeName := strings.TrimSpace(args[0])
+	nodeAddr := strings.TrimSpace(args[1])
 	nc := newNexusClient(nexus_url)
 	defer nc.Close()
 
-	err := nc.AddNode(node_addr)
+	err := nc.AddNode(nodeName, nodeAddr)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
@@ -176,13 +178,22 @@ func removeNode(nexus_url string, args []string) {
 		printUsage()
 		return
 	}
-	nodeUrl := strings.TrimSpace(args[0])
+	nodeIdString := strings.TrimSpace(args[0])
+	nodeId, err := strconv.ParseInt(nodeIdString, 10, 64)
+	if err != nil {
+		// handle error
+		fmt.Println(err.Error())
+		os.Exit(2)
+	}
+
 	nc := newNexusClient(nexus_url)
 	defer nc.Close()
 
-	err := nc.RemoveNode(nodeUrl)
+	err = nc.RemoveNode(uint64(nodeId))
 	if err != nil {
 		fmt.Println(err.Error())
+		os.Exit(2)
+
 	}
 	listNodesUsingCli(nc)
 }

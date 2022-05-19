@@ -511,17 +511,17 @@ func (rc *raftNode) publishReadStates(readStates []raft.ReadState) bool {
 }
 
 func (rc *raftNode) serveChannels() {
-	snap, err := rc.raftStorage.Snapshot()
+	snapshot, err := rc.raftStorage.Snapshot()
 	if err != nil {
 		panic(err)
 	}
-	rc.confState = snap.Metadata.ConfState
-	rc.snapshotIndex = snap.Metadata.Index
+	rc.confState = snapshot.Metadata.ConfState
+	rc.snapshotIndex = snapshot.Metadata.Index
 	// Set appliedIndex only if its not already initialised
 	// Note that we also set appliedIndex during init from
 	// storage supplied value.
 	if rc.appliedIndex == 0 {
-		rc.appliedIndex = snap.Metadata.Index
+		rc.appliedIndex = snapshot.Metadata.Index
 	}
 
 	defer rc.wal.Close()
