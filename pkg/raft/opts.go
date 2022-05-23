@@ -56,6 +56,7 @@ type options struct {
 	clusterUrl             string
 	clusterName            string
 	clusterUrls            []*url.URL
+	nodeState              string
 	replTimeout            time.Duration
 	leaseBasedReads        bool
 	statsdAddr             string
@@ -79,6 +80,7 @@ func init() {
 	flag.Int64Var(&replTimeoutInSecs, "nexus-repl-timeout", defaultRaftReplTimeout, "Replication timeout in seconds")
 	flag.BoolVar(&opts.leaseBasedReads, "nexus-lease-based-reads", true, "Perform reads using RAFT leader leases")
 	flag.StringVar(&opts.statsdAddr, "nexus-statsd-addr", "", "StatsD server address (host:port) for relaying various metrics")
+	flag.StringVar(&opts.nodeState, "nexus-node-state", "existing", "Start existing node or create a new one")
 
 	flag.IntVar(&opts.maxSnapFiles, "nexus-max-snapshots", defaultMaxSNAP, "Maximum number of snapshot files to retain (0 is unlimited)")
 	flag.IntVar(&opts.maxWALFiles, "nexus-max-wals", defaultMaxWAL, "Maximum number of wal files to retain (0 is unlimited)")
@@ -128,6 +130,10 @@ func (this *options) NodeUrl() *url.URL {
 
 func (this *options) Join() bool {
 	_, present := this.ClusterUrls()[this.NodeId()]
+	// apply override if defined
+	if this.nodeState == "new" {
+		return true
+	}
 	return !present
 }
 
