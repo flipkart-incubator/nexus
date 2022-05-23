@@ -220,7 +220,6 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry, snap raftpb.Snapshot) (<
 				if cc.NodeID == rc.id {
 					log.Printf("[Node %x] I've been removed from the cluster! Shutting down.", rc.id)
 					// TODO: In this case, check if its OK to not publish to rc.commitC
-					// check if this is new message or from wal replay?
 					return nil, false
 				}
 				if _, ok := rc.rpeers[cc.NodeID]; !ok {
@@ -557,10 +556,8 @@ func (rc *raftNode) serveChannels() {
 			processedMsgs := rc.processMessages(rd.Messages)
 			applyDoneC, ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries), rd.Snapshot)
 			if !ok {
-				log.Printf("nexus.raft: [Node %x] Got Removed from Cluster, Maynot get any more messages. \n", rc.id)
-				// Don't shutdown from here.
-				// rc.stop()
-				// return
+				rc.stop()
+				return
 			}
 			//TODO: this should be moved to the applyChannel consumer.
 			// Raft thread should not be blocked for snapshots which can take long time to complete.
