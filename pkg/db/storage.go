@@ -15,7 +15,8 @@ type RaftEntry struct {
 type Store interface {
 	io.Closer
 	GetLastAppliedEntry() (RaftEntry, error)
-	Save(RaftEntry, []byte) ([]byte, error)
+	SaveAppliedEntry(RaftEntry) error
+	Save([]byte) ([]byte, error)
 	Load([]byte) ([]byte, error)
 
 	Backup(SnapshotState) (io.ReadCloser, error)
