@@ -45,7 +45,7 @@ func insertKey(t *testing.T, key, val string, dbIdx int) {
 		Args: map[string][]byte{DBIndexKey: []byte(strconv.Itoa(dbIdx))},
 	}
 	reqBts, _ := req.Encode()
-	if saveRes, err := store.Save(db.RaftEntry{Term: 2, Index: 10}, reqBts); err != nil {
+	if saveRes, err := store.Save(reqBts); err != nil {
 		t.Fatal(err)
 	} else {
 		t.Logf("Insert response received: %s", saveRes)
@@ -59,7 +59,7 @@ func deleteKey(t *testing.T, key string, dbIdx int) {
 		Args: map[string][]byte{DBIndexKey: []byte(strconv.Itoa(dbIdx))},
 	}
 	reqBts, _ := req.Encode()
-	if delRes, err := store.Save(db.RaftEntry{}, reqBts); err != nil {
+	if delRes, err := store.Save(reqBts); err != nil {
 		t.Fatal(err)
 	} else {
 		t.Logf("Delete response received: %s", delRes)
@@ -73,7 +73,7 @@ func assertKey(t *testing.T, key, expVal string, dbIdx int) {
 		Args: map[string][]byte{DBIndexKey: []byte(strconv.Itoa(dbIdx))},
 	}
 	reqBts, _ := req.Encode()
-	if loadRes, err := store.Save(db.RaftEntry{}, reqBts); err != nil {
+	if loadRes, err := store.Save(reqBts); err != nil {
 		t.Fatal(err)
 	} else {
 		if string(loadRes) != expVal {

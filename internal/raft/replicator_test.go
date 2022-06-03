@@ -636,7 +636,12 @@ func (this *inMemKVStore) Load(data []byte) ([]byte, error) {
 	}
 }
 
-func (this *inMemKVStore) Save(raftEntry db.RaftEntry, data []byte) ([]byte, error) {
+func (this *inMemKVStore) SaveAppliedEntry(raftEntry db.RaftEntry) error {
+	this.currEntry = raftEntry
+	return nil
+}
+
+func (this *inMemKVStore) Save(data []byte) ([]byte, error) {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	if kvReq, err := fromBytes(data); err != nil {
@@ -647,7 +652,6 @@ func (this *inMemKVStore) Save(raftEntry db.RaftEntry, data []byte) ([]byte, err
 			return nil, errors.New(fmt.Sprintf("Given key: %s already exists", key))
 		} else {
 			this.content[key] = kvReq.Val
-			this.currEntry = raftEntry
 			return nil, nil
 		}
 	}

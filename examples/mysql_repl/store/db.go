@@ -84,6 +84,11 @@ func (this *mysqlStore) GetLastAppliedEntry() (db.RaftEntry, error) {
 	return db.RaftEntry{}, errors.New("not implemented")
 }
 
+// TODO: implement this correctly
+func (this *mysqlStore) SaveAppliedEntry(db.RaftEntry) error {
+	return errors.New("not implemented")
+}
+
 const txTimeout = 20 * time.Second // TODO: Should be configurable
 
 func (this *mysqlStore) load(ctx context.Context, sqlStmt string) (*sql.Rows, error) {
@@ -161,7 +166,7 @@ func (this *mysqlStore) Load(data []byte) ([]byte, error) {
 	}
 }
 
-func (this *mysqlStore) Save(_ db.RaftEntry, data []byte) ([]byte, error) {
+func (this *mysqlStore) Save(data []byte) ([]byte, error) {
 	saveReq := new(api.SaveRequest)
 	_ = saveReq.Decode(data)
 	var writeReq MySQLSaveRequest

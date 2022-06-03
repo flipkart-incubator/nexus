@@ -287,8 +287,7 @@ func (this *replicator) readCommits() {
 						log.Fatal(err)
 					} else {
 						replRes := internalNexusResponse{}
-						raftEntry := db.RaftEntry{Index: entry.Index, Term: entry.Term}
-						replRes.Res, replRes.Err = this.store.Save(raftEntry, replReq.Req)
+						replRes.Res, replRes.Err = this.store.Save(replReq.Req)
 						this.waiter.Trigger(replReq.ID, &replRes)
 					}
 				case raftpb.EntryConfChange:
@@ -298,6 +297,10 @@ func (this *replicator) readCommits() {
 					} else {
 						this.waiter.Trigger(cc.ID, &internalNexusResponse{entry.Data, nil})
 					}
+				}
+				err := this.store.SaveAppliedEntry(db.RaftEntry{Index: entry.Index, Term: entry.Term})
+				if err != nil {
+					log.Printf("[Node %x] Failed to save checkpoint to datastore %v", this.node.id, err.Error())
 				}
 			}
 			// after commit, update appliedIndex
