@@ -34,7 +34,7 @@ replace (
 	golang.org/x/net => github.com/golang/net v0.0.0-20190620200207-3b0461eec859
 	golang.org/x/oauth2 => github.com/golang/oauth2 v0.0.0-20180821212333-d2e6202438be
 	golang.org/x/sync => github.com/golang/sync v0.0.0-20190423024810-112230192c58
-	golang.org/x/sys => github.com/golang/sys v0.0.0-20191120155948-bd437916bb0e
+	golang.org/x/sys => github.com/golang/sys v0.0.0-20220610221304-9f5ed59c137d
 	golang.org/x/text => github.com/golang/text v0.3.0
 	golang.org/x/time => github.com/golang/time v0.0.0-20191024005414-555d28b269f0
 	golang.org/x/tools => github.com/golang/tools v0.0.0-20191029190741-b9c20aec41a5
