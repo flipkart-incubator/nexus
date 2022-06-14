@@ -26,6 +26,7 @@ import (
 const (
 	clusterSize = 3
 	logDir      = "/tmp/nexus_test/logs"
+	entDir      = "/tmp/nexus_test/ents"
 	snapDir     = "/tmp/nexus_test/snap"
 	clusterUrl  = "http://127.0.0.1:9321,http://127.0.0.1:9322,http://127.0.0.1:9323"
 	peer4Url    = "http://127.0.0.1:9324"
@@ -449,6 +450,7 @@ func newPeerWithDB(id int, db *inMemKVStore) (*peer, error) {
 	peerAddr := strings.Split(clusterUrl, ",")[id]
 	opts, err := raft.NewOptions(
 		raft.NodeUrl(peerAddr),
+		raft.EntryDir(entDir),
 		raft.LogDir(logDir),
 		raft.SnapDir(snapDir),
 		raft.ClusterUrl(clusterUrl),
@@ -475,6 +477,7 @@ func newPeer(id int) (*peer, error) {
 func newJoiningPeer(peerAddr string) (*peer, error) {
 	opts, err := raft.NewOptions(
 		raft.NodeUrl(peerAddr),
+		raft.EntryDir(entDir),
 		raft.LogDir(logDir),
 		raft.SnapDir(snapDir),
 		raft.ClusterUrl(clusterUrl),
@@ -689,17 +692,14 @@ func (this *inMemKVStore) Restore(data io.ReadCloser) error {
 }
 
 func createRaftDirs() error {
-	if err := os.RemoveAll(snapDir); err != nil {
-		return err
-	}
-	if err := os.RemoveAll(logDir); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(snapDir, os.ModeDir|0777); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(logDir, os.ModeDir|0777); err != nil {
-		return err
+	dirs := []string{entDir, snapDir, logDir}
+	for _, dir := range dirs {
+		if err := os.RemoveAll(dir); err != nil {
+			return err
+		}
+		if err := os.MkdirAll(dir, os.ModeDir|0777); err != nil {
+			return err
+		}
 	}
 	return nil
 }
