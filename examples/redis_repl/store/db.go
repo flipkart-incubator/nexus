@@ -41,14 +41,15 @@ const (
 )
 
 func (this *redisStore) GetLastAppliedEntry() (db.RaftEntry, error) {
-	metaCli := selectDB(int(this.metaDB), this.cli)
-	if result, err := metaCli.HGetAll(RaftStateKey).Result(); err != nil {
-		return db.RaftEntry{}, err
-	} else {
-		term, _ := strconv.ParseUint(result[RaftStateTermKey], 10, 64)
-		index, _ := strconv.ParseUint(result[RaftStateIndexKey], 10, 64)
-		return db.RaftEntry{Term: term, Index: index}, nil
-	}
+	return db.RaftEntry{}, fmt.Errorf("not_implemented")
+	//metaCli := selectDB(int(this.metaDB), this.cli)
+	//if result, err := metaCli.HGetAll(RaftStateKey).Result(); err != nil {
+	//	return db.RaftEntry{}, err
+	//} else {
+	//	term, _ := strconv.ParseUint(result[RaftStateTermKey], 10, 64)
+	//	index, _ := strconv.ParseUint(result[RaftStateIndexKey], 10, 64)
+	//	return db.RaftEntry{Term: term, Index: index}, nil
+	//}
 }
 
 func (this *redisStore) SaveAppliedEntry(raftState db.RaftEntry) error {
