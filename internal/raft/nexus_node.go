@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/snap"
+	"github.com/flipkart-incubator/nexus/internal/raft/storage"
 	"github.com/flipkart-incubator/nexus/pkg/db"
 	"golang.org/x/sync/semaphore"
 
@@ -74,6 +75,7 @@ type raftNode struct {
 	id          uint64 // client ID for raft session
 	cid         uint64 //clusterId
 	join        bool   // node is joining an existing cluster
+	entDir      string // path for storing entries
 	waldir      string // path to WAL directory
 	snapdir     string // path to snapshot directory
 	getSnapshot func(db.SnapshotState) (io.ReadCloser, error)
@@ -85,7 +87,7 @@ type raftNode struct {
 
 	// raft backing for the commit/error channel
 	node        raft.Node
-	raftStorage *raft.MemoryStorage
+	raftStorage *storage.EntryStore
 	wal         *wal.WAL
 
 	snapshotter *snap.Snapshotter
@@ -124,6 +126,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *
 		id:                     nodeId,
 		rpeers:                 opts.ClusterUrls(),
 		join:                   opts.Join(),
+		entDir:                 opts.EntryDir(),
 		waldir:                 opts.LogDir(),
 		snapdir:                opts.SnapDir(),
 		getSnapshot:            store.Backup,
@@ -291,7 +294,6 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 	if err != nil {
 		log.Fatalf("nexus.raft: [Node %x] failed to read WAL (%v)", rc.id, err)
 	}
-	rc.raftStorage = raft.NewMemoryStorage()
 	if snapshot != nil {
 		rc.raftStorage.ApplySnapshot(*snapshot)
 	}
@@ -335,6 +337,10 @@ func (rc *raftNode) startRaft() {
 		}
 	}
 	rc.snapshotter = snap.New(rc.snapdir)
+	var err error
+	if rc.raftStorage, err = storage.NewEntryStore(rc.entDir); err != nil {
+		log.Fatalf("[Node %x] unable to create entry store, error: %v", rc.id, err)
+	}
 
 	oldwal := wal.Exist(rc.waldir)
 	rc.wal = rc.replayWAL()
@@ -392,6 +398,7 @@ func (rc *raftNode) stop() {
 	close(rc.commitC)
 	close(rc.errorC)
 	rc.node.Stop()
+	_ = rc.raftStorage.Close()
 }
 
 func (rc *raftNode) stopHTTP() {
