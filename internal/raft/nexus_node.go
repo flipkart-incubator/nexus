@@ -478,7 +478,7 @@ func (rc *raftNode) triggerSnapshot() {
 	}
 	defer data.Close()
 
-	snapshot, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, nil)
+	snapshot, err := rc.raftStorage.CreateSnapshot(appliedIndex, &rc.confState, nil)
 	if err != nil {
 		// the snapshot was done asynchronously with the progress of raft.
 		// raft might have already got a newer snapshot.
