@@ -14,13 +14,22 @@ import (
 	"sync"
 )
 
+type RaftStorageEngine interface {
+	raft.Storage
+	SetHardState(st pb.HardState) error
+	ApplySnapshot(snap pb.Snapshot) error
+	Compact(compactIndex uint64) error
+	Append(entries []pb.Entry) error
+	CreateSnapshot(i uint64, cs *pb.ConfState, data []byte) (pb.Snapshot, error)
+}
+
 // EntryStore implements the Storage interface backed by
 // an SS table. Specifically we use the implementation
 // from Badger for storing entries in sorted manner.
 type EntryStore struct {
 	sync.Mutex
 	io.Closer
-	db *badger.DB
+	db        *badger.DB
 	hardState pb.HardState
 	snapshot  pb.Snapshot
 }
@@ -191,7 +200,7 @@ func (es *EntryStore) Append(entries []pb.Entry) error {
 		input: 		2-3-4-5
 		exist:		  3-4-5
 		new_input:	4-5
-	 */
+	*/
 	if firstStoredIndex >= entries[0].Index {
 		entries = entries[1+firstStoredIndex-entries[0].Index:]
 	}
@@ -201,7 +210,7 @@ func (es *EntryStore) Append(entries []pb.Entry) error {
 		input:		  4'-5'-6'-7'-8'
 		exist:		3-4-5
 		new_exist:	3-4'-5'-6'-7'-8'
-	 */
+	*/
 	if err := es.removeEntriesFrom(entries[0].Index, false); err != nil {
 		return err
 	}
@@ -211,7 +220,7 @@ func (es *EntryStore) Append(entries []pb.Entry) error {
 		input: 		      4'-5'-6'
 		exist:		1-2-3
 		new_exist:	1-2-3-4'-5'-6'
-	 */
+	*/
 	return es.appendEntries(entries)
 }
 

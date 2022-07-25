@@ -88,7 +88,7 @@ type raftNode struct {
 
 	// raft backing for the commit/error channel
 	node        raft.Node
-	raftStorage raft.Storage
+	raftStorage storage.RaftStorageEngine
 	wal         *wal.WAL
 
 	snapshotter *snap.Snapshotter
@@ -406,7 +406,11 @@ func (rc *raftNode) stop() {
 	close(rc.commitC)
 	close(rc.errorC)
 	rc.node.Stop()
-	_ = rc.raftStorage.Close()
+
+	if entStore, ok := rc.raftStorage.(*storage.EntryStore); ok {
+		entStore.Close()
+	}
+
 }
 
 func (rc *raftNode) stopHTTP() {

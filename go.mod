@@ -1,6 +1,6 @@
 module github.com/flipkart-incubator/nexus
 
-go 1.13
+go 1.18
 
 require (
 	github.com/coreos/etcd v3.3.17+incompatible
