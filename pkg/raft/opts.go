@@ -36,6 +36,7 @@ type Options interface {
 	NodeUrl() *url.URL
 	Join() bool
 	EntryDir() string
+	EntryStoreType() string
 	LogDir() string
 	SnapDir() string
 	ClusterUrls() map[uint64]string
@@ -53,6 +54,7 @@ type options struct {
 	nodeUrl                *url.URL
 	nodeUrlStr             string
 	entryDir               string
+	entryStoreType         string
 	logDir                 string
 	snapDir                string
 	clusterUrl             string
@@ -75,7 +77,6 @@ var (
 
 func init() {
 	flag.StringVar(&opts.nodeUrlStr, "nexus-node-url", "", "Url for the Nexus service to be started on this node (format: http://<local_node>:<port_num>)")
-	flag.StringVar(&opts.entryDir, "nexus-entry-dir", "/tmp/ents", "Dir for storing RAFT entries")
 	flag.StringVar(&opts.logDir, "nexus-log-dir", "/tmp/logs", "Dir for storing RAFT logs")
 	flag.StringVar(&opts.snapDir, "nexus-snap-dir", "/tmp/snap", "Dir for storing RAFT snapshots")
 	flag.StringVar(&opts.clusterUrl, "nexus-cluster-url", "", "Comma separated list of Nexus URLs of other nodes in the cluster")
@@ -84,6 +85,8 @@ func init() {
 	flag.BoolVar(&opts.leaseBasedReads, "nexus-lease-based-reads", true, "Perform reads using RAFT leader leases")
 	flag.StringVar(&opts.statsdAddr, "nexus-statsd-addr", "", "StatsD server address (host:port) for relaying various metrics")
 	flag.StringVar(&opts.nodeState, "nexus-node-state", "existing", "Start existing node or create a new one")
+	flag.StringVar(&opts.entryDir, "nexus-entry-dir", "/tmp/ents", "Dir for storing RAFT entries")
+	flag.StringVar(&opts.entryStoreType, "nexus-entry-store", "memory", "RAFT entry store location memory/disk")
 
 	flag.IntVar(&opts.maxSnapFiles, "nexus-max-snapshots", defaultMaxSNAP, "Maximum number of snapshot files to retain (0 is unlimited)")
 	flag.IntVar(&opts.maxWALFiles, "nexus-max-wals", defaultMaxWAL, "Maximum number of wal files to retain (0 is unlimited)")
@@ -106,6 +109,7 @@ func OptionsFromFlags() []Option {
 		SnapshotCount(opts.snapshotCount),
 		SnapshotCatchUpEntries(opts.snapshotCatchUpEntries),
 		ClusterName(opts.clusterName),
+		EntryStore(opts.entryStoreType),
 	}
 }
 
@@ -151,6 +155,10 @@ func (this *options) SnapDir() string {
 
 func (this *options) EntryDir() string {
 	return fmt.Sprintf("%s/node_%d", this.entryDir, this.NodeId())
+}
+
+func (this *options) EntryStoreType() string {
+	return this.entryStoreType
 }
 
 func (this *options) ClusterUrls() map[uint64]string {
@@ -397,6 +405,13 @@ func (this *options) ClusterId() uint64 {
 func ClusterName(name string) Option {
 	return func(opts *options) error {
 		opts.clusterName = name
+		return nil
+	}
+}
+
+func EntryStore(_type string) Option {
+	return func(opts *options) error {
+		opts.entryStoreType = _type
 		return nil
 	}
 }
