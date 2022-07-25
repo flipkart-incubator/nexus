@@ -80,6 +80,7 @@ type raftNode struct {
 	snapdir     string // path to snapshot directory
 	getSnapshot func(db.SnapshotState) (io.ReadCloser, error)
 	lastIndex   uint64 // index of log at start
+	entType     string //entryStore format  memory/disk
 
 	confState     raftpb.ConfState
 	snapshotIndex uint64
@@ -87,7 +88,7 @@ type raftNode struct {
 
 	// raft backing for the commit/error channel
 	node        raft.Node
-	raftStorage *storage.EntryStore
+	raftStorage storage.RaftStorageEngine
 	wal         *wal.WAL
 
 	snapshotter *snap.Snapshotter
@@ -127,6 +128,7 @@ func NewRaftNode(opts pkg_raft.Options, statsCli stats.Client, store db.Store) *
 		rpeers:                 opts.ClusterUrls(),
 		join:                   opts.Join(),
 		entDir:                 opts.EntryDir(),
+		entType:                opts.EntryStoreType(),
 		waldir:                 opts.LogDir(),
 		snapdir:                opts.SnapDir(),
 		getSnapshot:            store.Backup,
@@ -338,8 +340,14 @@ func (rc *raftNode) startRaft() {
 	}
 	rc.snapshotter = snap.New(rc.snapdir)
 	var err error
-	if rc.raftStorage, err = storage.NewEntryStore(rc.entDir); err != nil {
-		log.Fatalf("[Node %x] unable to create entry store, error: %v", rc.id, err)
+
+	switch rc.entType {
+	case "disk":
+		if rc.raftStorage, err = storage.NewEntryStore(rc.entDir); err != nil {
+			log.Fatalf("[Node %x] unable to create entry store, error: %v", rc.id, err)
+		}
+	default:
+		rc.raftStorage = raft.NewMemoryStorage()
 	}
 
 	oldwal := wal.Exist(rc.waldir)
@@ -398,7 +406,11 @@ func (rc *raftNode) stop() {
 	close(rc.commitC)
 	close(rc.errorC)
 	rc.node.Stop()
-	_ = rc.raftStorage.Close()
+
+	if entStore, ok := rc.raftStorage.(*storage.EntryStore); ok {
+		entStore.Close()
+	}
+
 }
 
 func (rc *raftNode) stopHTTP() {
