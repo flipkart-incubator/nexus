@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install --yes --allow-unauthenticated adduser vim 
     && apt-get clean && rm -rf /var/lib/apt/lists/*
  
 # Install GoLang
-RUN curl -fsSL https://dl.google.com/go/go1.16.6.linux-amd64.tar.gz | tar xz \
+RUN curl -fsSL https://dl.google.com/go/go1.18.2.linux-amd64.tar.gz | tar xz \
     && chown -R root:root ./go && mv ./go /usr/local
 ENV PATH="/usr/local/go/bin:${PATH}"
 
