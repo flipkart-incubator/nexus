@@ -5,13 +5,14 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"github.com/flipkart-incubator/nexus/pkg/api"
-	"github.com/flipkart-incubator/nexus/pkg/db"
 	"io"
 	"io/ioutil"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/flipkart-incubator/nexus/pkg/api"
+	"github.com/flipkart-incubator/nexus/pkg/db"
 
 	"github.com/flipkart-incubator/nexus/internal/stats"
 	"github.com/go-redis/redis"
@@ -40,14 +41,26 @@ const (
 )
 
 func (this *redisStore) GetLastAppliedEntry() (db.RaftEntry, error) {
-	metaCli := selectDB(int(this.metaDB), this.cli)
-	if result, err := metaCli.HGetAll(RaftStateKey).Result(); err != nil {
-		return db.RaftEntry{}, err
-	} else {
-		term, _ := strconv.ParseUint(result[RaftStateTermKey], 10, 64)
-		index, _ := strconv.ParseUint(result[RaftStateIndexKey], 10, 64)
-		return db.RaftEntry{Term: term, Index: index}, nil
-	}
+	return db.RaftEntry{}, fmt.Errorf("not_implemented")
+	//metaCli := selectDB(int(this.metaDB), this.cli)
+	//if result, err := metaCli.HGetAll(RaftStateKey).Result(); err != nil {
+	//	return db.RaftEntry{}, err
+	//} else {
+	//	term, _ := strconv.ParseUint(result[RaftStateTermKey], 10, 64)
+	//	index, _ := strconv.ParseUint(result[RaftStateIndexKey], 10, 64)
+	//	return db.RaftEntry{Term: term, Index: index}, nil
+	//}
+}
+
+func (this *redisStore) SaveAppliedEntry(raftState db.RaftEntry) error {
+	defer this.statsCli.Timing("redis_checkpoint.latency.ms", time.Now())
+	luaScript := fmt.Sprintf(CheckpointLUAScript,
+		this.metaDB,                                    /* switch to metadata DB */
+		RaftStateKey, RaftStateTermKey, raftState.Term, /* insert RAFT state term */
+		RaftStateKey, RaftStateIndexKey, raftState.Index, /* insert RAFT state index */
+	)
+	_, err := this.evalLua(luaScript)
+	return err
 }
 
 const (
@@ -57,10 +70,13 @@ redis.call('select', '%d')
 `
 	SaveLUAScript = `
 redis.call('select', '%d')
-redis.call('hset', '%s', '%s', '%d')
-redis.call('hset', '%s', '%s', '%d')
-redis.call('select', '%d')
 %s
+`
+
+	CheckpointLUAScript = `
+redis.call('select', '%d')
+redis.call('hset', '%s', '%s', '%d')
+redis.call('hset', '%s', '%s', '%d')
 `
 )
 
@@ -85,7 +101,7 @@ func (this *redisStore) Load(data []byte) ([]byte, error) {
 	return this.evalLua(luaScript)
 }
 
-func (this *redisStore) Save(raftState db.RaftEntry, data []byte) ([]byte, error) {
+func (this *redisStore) Save(data []byte) ([]byte, error) {
 	defer this.statsCli.Timing("redis_save.latency.ms", time.Now())
 
 	req := new(api.SaveRequest)
@@ -101,9 +117,6 @@ func (this *redisStore) Save(raftState db.RaftEntry, data []byte) ([]byte, error
 
 	luaSnippet := string(req.Data)
 	luaScript := fmt.Sprintf(SaveLUAScript,
-		this.metaDB,                                    /* switch to metadata DB */
-		RaftStateKey, RaftStateTermKey, raftState.Term, /* insert RAFT state term */
-		RaftStateKey, RaftStateIndexKey, raftState.Index, /* insert RAFT state index */
 		userDB,     /* switch to user DB */
 		luaSnippet) /* user supplied Lua snippet */
 	return this.evalLua(luaScript)
