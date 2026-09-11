@@ -84,7 +84,7 @@ func sendMySQL(nexus_url string, args []string) {
 			fmt.Printf("Response from MySQL (without quotes): '%s'\n", res)
 		}
 	default:
-		fmt.Printf("Unknown mode: " + mode)
+		fmt.Println("Unknown mode: " + mode)
 	}
 
 }
