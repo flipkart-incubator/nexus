@@ -14,7 +14,6 @@ can be achieved with few data stores.
 - Periodic data consistency checks across replicas [TODO]
 
 ## Dependencies
-- Go version 1.13+
 - [Raft consensus algorithm](https://raft.github.io/) by [etcd/raft](https://github.com/etcd-io/etcd/tree/master/raft) version 3.3+
 
 ## Building Nexus
